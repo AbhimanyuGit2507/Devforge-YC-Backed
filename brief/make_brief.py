@@ -51,11 +51,12 @@ with PdfPages(ROOT / a.out) as pdf:
              "- Learned correction: ConvNeXt-style blocks, per-pixel norm (no global coupling), FiLM conditioning on season,",
              "  ensemble noise z and lead day. Hard reach budget, measured by autograd: information moves <= 5 cells/day.",
              "- Inputs: last 3 days, anomaly vs climatology, target-day climatology, land-sea mask, orography, lat/lon.",
-             "- Ensemble: independently seeded runs x noise members; mean for smooth fields, probability-matched mean for rain.",
+             "- Ensemble: 2 independently seeded runs x 8 fixed noise members, averaged (deterministic: zero shock = identical output).",
              "# Training (how we prevent drift and blur)",
              "- Almost-fair CRPS (ECMWF AIFS-CRPS) over 2 members: rewards accurate and sharp forecasts at once.",
              "- Autoregressive curriculum 1 -> 4 -> 10 days with lead-decayed weights + input noise: trains on its own errors (drift).",
-             "- 2-D spectral loss + probability-matched rain: keeps small-scale variance and heavy-rain peaks (blur).",
+             "- 2-D spectral loss keeps small-scale variance (blur); per-lead rain scale (fit on 2019) restores heavy-rain hits.",
+             "- Tried probability-matched rain: sharper, but rank re-sorting broke shock stability (10.0 -> 13.9/15 without it).",
              "- Latitude weighting, x3 weight on rain > 10 mm/day, soft physics penalty (no heavy rain from a dry column).",
              "- Chronological split: train 2005-18, tune 2019 (rain scale), test 2020-21 once. Deterministic inference: zero shock = no change.",
              "# Results on held-out 2020-21 (organisers' scoring code)",
@@ -71,7 +72,7 @@ with PdfPages(ROOT / a.out) as pdf:
     ax2.set_title("Light cone: where the warm Bay of Bengal shock's energy is, by day"); ax2.legend(loc="upper left", fontsize=8)
     f.colorbar(im, ax=ax2, label="share of response energy"); pdf.savefig(f); plt.close(f)
 
-    f = plt.figure(figsize=(8.27, 11.69)); ax = f.add_axes([0.07, 0.55, 0.86, 0.42])
+    f = plt.figure(figsize=(8.27, 11.69)); ax = f.add_axes([0.07, 0.58, 0.86, 0.40])
     txt(ax, ["# Page 2: visualization and impact",
              "Dashboard (dashboard/, static HTML/JS, no internet) calls the live simulation endpoint; nothing is pre-rendered.",
              "- Timeline Prime vs shocked universe vs difference, any day 1-14; preset or hand-drawn box shocks.",
@@ -85,7 +86,8 @@ with PdfPages(ROOT / a.out) as pdf:
              "- Ensemble: 8 perturbed members -> spread maps and probability of rain > 10 mm/day.",
              "Use case: a state disaster cell asks 'what if the Bay is 3 K warmer this week?' and sees which districts move into",
              "flood or heat-stress categories, with ensemble confidence, in under a second."])
-    if Path(ROOT / a.screenshot).exists():
-        ax3 = f.add_axes([0.05, 0.05, 0.9, 0.48]); ax3.imshow(plt.imread(ROOT / a.screenshot)); ax3.axis("off")
+    for k, shot in enumerate([a.screenshot, "brief/dashboard_inverse.png"]):
+        if Path(ROOT / shot).exists():
+            ax3 = f.add_axes([0.05, 0.30 - 0.27 * k, 0.9, 0.26]); ax3.imshow(plt.imread(ROOT / shot)); ax3.axis("off")
     pdf.savefig(f); plt.close(f)
 print("wrote", a.out)

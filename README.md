@@ -6,11 +6,13 @@ local shock is applied. A browser dashboard drives it live and turns the rollout
 ensemble-uncertainty impacts.
 
 ```
-serve.py            inference server (FastAPI, offline, CPU) — POST /health, POST /simulate
-model.py            the network + rollout (shared by training and serving)
-train.py            training (CPU, ~45 min with 4 threads)
-evaluate.py         self-evaluation on held-out 2020–21 with the organisers' scoring functions
-weights/            trained weights + climatology/static maps the model conditions on (~1 MB, no LFS needed)
+serve.py            inference server (FastAPI, offline, CPU) — POST /health, /simulate, /inverse
+core/               MonsoonNet: data + splits, network + ensemble, losses, inverse shock search
+train.py            MonsoonNet training (CUDA / Apple MPS / CPU, time-budgeted, resumable)
+fit_postproc.py     per-lead rain scale fitted on 2019 only
+evaluate.py         self-evaluation with the organisers' scoring functions (--v2 for the ensemble)
+weights_v2/         submitted ensemble (2 seeds) + climatology/static maps (~30 MB, no LFS needed)
+model.py, weights/, train_baseline.py   first baseline model (used automatically if weights_v2/ is absent)
 dashboard/          interactive map dashboard (static HTML/JS, separate from the server)
 brief/              2-page brief (PDF) and the script that builds it
 ```
@@ -20,7 +22,7 @@ brief/              2-page brief (PDF) and the script that builds it
 pip install torch numpy fastapi uvicorn
 python serve.py --port 8000
 ```
-The server loads `weights/` at import (≈1 s), listens on 0.0.0.0 and answers a 10-step `/simulate` in well under 1 s on CPU.
+The server loads `weights_v2/` at import (≈2 s), listens on 0.0.0.0 and answers a 10-step `/simulate` in ≈1 s on 4 CPU cores.
 Check it with the kit validator: `python -m monsoon_r1.schema_validator http://localhost:8000`.
 
 ## Dashboard
@@ -38,17 +40,24 @@ and an 8-member Ensemble (spread and heavy-rain probability). No internet or CDN
 pip install -r requirements.txt
 # data from the kit release: https://github.com/OfficialAbhinavSingh/yug-monsoon-kit/releases/tag/v1.0.0
 mkdir -p data && curl -L -o data/india_climate_train.nc https://github.com/OfficialAbhinavSingh/yug-monsoon-kit/releases/download/v1.0.0/india_climate_train.nc
-python train.py --data data/india_climate_train.nc --out weights
-python evaluate.py --data data/india_climate_train.nc        # needs the monsoon_r1 kit installed
+python train.py --seed 1 --minutes 150 --out weights_v2/run_s1      # one seed; GPU recommended (T4: ~2.5 h)
+python train.py --seed 1 --init weights_v2/run_s1 --stages 10:1.0 --lr 3e-4 --minutes 45 --out weights_v2/run_s1   # optional 10-day fine-tune
+python fit_postproc.py --weights weights_v2                          # rain scale, fitted on 2019 only
+python evaluate.py --v2 weights_v2 --years test                      # needs the monsoon_r1 kit installed
 python dashboard/make_samples.py --data data/india_climate_train.nc   # rebuild dashboard starting states
 ```
 
+## Results (held-out 2020–21, organisers' scoring code, 103 windows)
+| | forecast skill | heavy-rain CSI skill | anti-blur | shocks | 10-step latency |
+|---|---|---|---|---|---|
+| baseline local CNN | 0.103 | 0.084 | 10/10 | 12.6/15 | 31 ms |
+| **MonsoonNet ensemble (submitted)** | **0.115** | **0.092** | **10/10** | **13.9/15** | ~0.9 s |
+
 ## Model in one paragraph
-Each day is predicted as a residual on the previous day by a small CNN whose spatial receptive field is exactly 3 cells
-(≈330 km): information can only travel 3 cells per simulated day, so shocks start local and spread outward and can never
-teleport. The network sees the last 3 days, the target-day climatology, land-sea mask, orography, latitude/longitude and
-the season (doy sin/cos). Rain is modelled in log1p space and is non-negative by construction. Training uses a curriculum
-of 1-, 4- and 8-day autoregressive unrolls with backprop through the whole rollout (anti-drift) and a spatial-spread loss
-term (anti-blur); a per-lead rain scale is calibrated on held-out years to maximise heavy-rain (>10 mm/day) CSI.
-Inference is deterministic, so a zero shock returns exactly the unperturbed rollout. Details, results and failure modes
+MonsoonNet steps one day at a time: a physics core advects every field along the 10 m wind (semi-Lagrangian, ≤ 2 cells/day),
+and a local learned correction (ConvNeXt-style blocks, per-pixel norm, FiLM conditioning on season, noise and lead day) adds
+the rest. Its measured reach is 5 cells per simulated day, so shocks start local and spread outward and can never teleport.
+It is trained as a CRPS ensemble (2 noise members, almost-fair CRPS) with a spectral anti-blur loss, extra weight on heavy
+rain, a soft physics penalty and a 1 → 4 → 10-day rollout curriculum (anti-drift). Split: train 2005–18, tune 2019, test
+2020–21. Serving averages 2 seeds × 8 fixed noise members (deterministic: a zero shock returns exactly the same rollout). Details, results and failure modes
 are in `brief/brief.pdf`.

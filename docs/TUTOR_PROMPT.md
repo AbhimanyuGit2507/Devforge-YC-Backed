@@ -165,8 +165,7 @@ For each, also teach **"why did we choose this instead of the obvious alternativ
 - All-years runs cannot be scored on 2020–21 (they saw it) — only added if the scored runs pass the gate.
 
 ### B7. Inference (`core/net.Ensemble`)
-- Loads every run × N fixed noise members (member 0 has z = 0). Continuous variables: ensemble mean. Rain:
-  **probability-matched mean** (spatial pattern from the mean, amounts from the pooled members — keeps peaks).
+- Loads every run × N fixed noise members (member 0 has z = 0). All variables: ensemble mean (probability matching was tried and dropped).
   Per-lead rain scale fitted on **2019 only** to maximise CSI (`fit_postproc.py`). Temperature clamped to a physical range,
   any NaN replaced.
 - Deterministic: same input → same output, so a zero shock changes nothing (measured difference: exactly 0).
@@ -174,7 +173,11 @@ For each, also teach **"why did we choose this instead of the obvious alternativ
   2019: skill −0.094 with 1 member, 0.006 with 2, 0.092 with 8. Default is now 8; the final count is chosen so a 10-day call
   stays under ~2 s on 4 CPU cores.
 - Gate: the new ensemble replaces the baseline only if it beats it on 2020–21. Fallbacks: blend baseline + ensemble, or keep
-  the baseline. Final numbers: [TEAM FILLS IN FROM THE BRIEF].
+  the baseline. Final: submitted = Kaggle seeds 1+2 (end of 4-day stage) × 8 members, plain-mean rain.
+  2020–21 test: skill 0.115, heavy-rain CSI skill 0.092, anti-blur 10/10, causality 13.9/15, ~0.9 s per call (≈81.6/85
+  automated vs ≈76 for the baseline). Probability-matched rain was dropped: it broke shock stability (10.0 → 13.9 without it).
+  10-day fine-tuned seeds and a 4-checkpoint ensemble tied on 2019 (within noise), so the simpler validated one was kept.
+  Kaggle T4s ran out of memory at the 10-day stage → smaller batch for long rollouts + resume option.
 
 ### B8. Shocks and causality
 - Shock = physical delta added to the last input day. Local reach (≤ 5 cells/day) + advection along the wind give "local
