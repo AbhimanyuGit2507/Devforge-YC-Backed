@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Monsoon Multiverse</title>
+<style>
+:root{--bg:#0f1418;--panel:#182027;--ink:#e6edf1;--mute:#8da0ad;--accent:#4fb3d9;--line:#2a3640}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,-apple-system,Segoe UI,sans-serif}
+header{padding:14px 20px;border-bottom:1px solid var(--line);display:flex;gap:16px;align-items:baseline;flex-wrap:wrap}
+header h1{font-size:18px;margin:0}
+header .status{color:var(--mute);font-size:13px}
+main{display:grid;grid-template-columns:300px 1fr;gap:16px;padding:16px 20px}
+@media (max-width:900px){main{grid-template-columns:1fr}}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px}
+.panel h2{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--mute);margin:0 0 10px}
+label{display:block;margin:8px 0 3px;color:var(--mute);font-size:12px}
+select,input,button{width:100%;padding:7px 8px;background:#0f1418;color:var(--ink);border:1px solid var(--line);border-radius:6px;font:inherit}
+button{background:var(--accent);color:#06222e;font-weight:600;cursor:pointer;border:none;margin-top:10px}
+button.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+.row{display:flex;gap:8px}.row>*{flex:1}
+.maps{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}
+.map{position:relative}
+.map canvas{width:100%;aspect-ratio:36/32;image-rendering:pixelated;border-radius:6px;display:block;background:#000}
+.map .cap{font-size:12px;color:var(--mute);margin:4px 0}
+.cbar{height:10px;border-radius:3px;margin-top:4px}
+.cbl{display:flex;justify-content:space-between;font-size:11px;color:var(--mute)}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+.tabs button{width:auto;margin:0;padding:6px 12px;background:transparent;color:var(--ink);border:1px solid var(--line)}
+.tabs button.on{background:var(--accent);color:#06222e;border-color:var(--accent)}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:10px 0}
+.kpi{background:#0f1418;border:1px solid var(--line);border-radius:6px;padding:8px 10px}
+.kpi b{display:block;font-size:20px}.kpi span{color:var(--mute);font-size:12px}
+.note{color:var(--mute);font-size:12px}
+#day{width:100%}
+</style>
+</head>
+<body>
+<header><h1>Monsoon Multiverse — India climate digital twin</h1><span class="status" id="status">connecting…</span></header>
+<main>
+<aside class="panel">
+  <h2>Timeline</h2>
+  <label for="server">Simulation server</label><input id="server" value="http://localhost:8000">
+  <label for="sample">Starting state (3 real days)</label><select id="sample"></select>
+  <label for="steps">Days to simulate</label><input id="steps" type="number" min="1" max="14" value="10">
+  <h2 style="margin-top:16px">Shock (multiverse branch)</h2>
+  <label for="preset">Preset</label>
+  <select id="preset">
+    <option value="none">No shock (Timeline Prime only)</option>
+    <option value="warm_ocean">Warm Bay of Bengal (+3 K, +15% moisture)</option>
+    <option value="monsoon_stall">Monsoon stall (−40% Arabian Sea wind)</option>
+    <option value="custom">Custom box…</option>
+  </select>
+  <div id="custom" hidden>
+    <label for="cch">Channel</label>
+    <select id="cch"><option value="0">t2m (K)</option><option value="1">tp (mm/day)</option><option value="2">u10 (m/s)</option><option value="3">v10 (m/s)</option><option value="4">msl (Pa)</option><option value="5">tcwv (kg/m²)</option></select>
+    <div class="row"><div><label for="cmode">Mode</label><select id="cmode"><option value="add">Add</option><option value="pct">% of current</option></select></div>
+    <div><label for="cval">Amount</label><input id="cval" type="number" value="3" step="any"></div></div>
+    <div class="row"><div><label for="la0">Lat min</label><input id="la0" type="number" value="8"></div><div><label for="la1">Lat max</label><input id="la1" type="number" value="20"></div></div>
+    <div class="row"><div><label for="lo0">Lon min</label><input id="lo0" type="number" value="82"></div><div><label for="lo1">Lon max</label><input id="lo1" type="number" value="94"></div></div>
+    <p class="note">Tip: drag on any map to draw the box.</p>
+  </div>
+  <button id="run">Run simulation</button>
+  <p class="note" id="timing"></p>
+</aside>
+<section>
+  <div class="panel">
+    <div class="tabs" id="tabs"></div>
+    <div class="row" style="align-items:end">
+      <div><label for="chan">Field</label><select id="chan"></select></div>
+      <div style="flex:2"><label for="day">Day <span id="dayl">1</span></label><input id="day" type="range" min="1" max="10" value="1"></div>
+    </div>
+    <div class="kpis" id="kpis"></div>
+    <div class="maps" id="maps"></div>
+    <p class="note" id="explain"></p>
+  </div>
+</section>
+</main>
+<script src="app.js"></script>
+</body>
+</html>

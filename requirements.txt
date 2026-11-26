@@ -1,0 +1,11 @@
+torch
+numpy
+scipy
+pandas
+xarray
+netCDF4
+fastapi
+uvicorn
+# dev only: evaluation + brief
+matplotlib
+# monsoon_r1 kit: pip install git+https://github.com/OfficialAbhinavSingh/yug-monsoon-kit
