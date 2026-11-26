@@ -18,6 +18,7 @@ ap.add_argument("--data", default="data/india_climate_train.nc")
 ap.add_argument("--weights", default="weights")
 ap.add_argument("--every", type=int, default=7)
 ap.add_argument("--v2", help="evaluate a core.net.Ensemble directory instead of the baseline weights")
+ap.add_argument("--json", help="also write the summary numbers to this JSON file")
 ap.add_argument("--years", default="test", choices=["test", "val"])
 a = ap.parse_args()
 
@@ -58,3 +59,10 @@ for i in idx[::6]:
     res.append(S.causality_points(rr, null_ok))
     print(t[i].date(), "null", null_ok, [{k: (round(v, 3) if isinstance(v, float) else v) for k, v in r.items()} for r in rr])
 print(f"causality pts mean {np.mean(res):.1f}/15   inference ms (10 steps) median {np.median(ms):.0f}")
+
+if a.json:
+    import json
+    Path(a.json).parent.mkdir(parents=True, exist_ok=True)
+    Path(a.json).write_text(json.dumps({"windows": len(idx), "mean_ss": fp["mean_ss"], "ss_persist": float(np.mean(sp)),
+        "csi_skill": fp["mean_csi_skill"], "forecast_pts": fp["points"], "var_ratio": np.nanmean(R, 0).round(3).tolist(),
+        "anti_blur_pts": S.anti_blur_points(R), "causality_pts": float(np.mean(res)), "ms_median": float(np.median(ms))}, indent=1))
