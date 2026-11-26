@@ -24,13 +24,21 @@ else:
     MODEL_NAME, MODEL = "monsoon-twin-localcnn-v1", twin.load(Path(__file__).parent / "weights")
 _WARM = np.full((3, 6, 32, 36), [[[290.0]], [[1.0]], [[0.0]], [[0.0]], [[101000.0]], [[30.0]]], "f4")
 MODEL.rollout(_WARM, [0.0, 1.0], 2)  # warm-up
-if isinstance(MODEL, Ensemble):   # speed guard: the judge allows 5 s per 10-step call; keep 10-step calls under ~3 s (limit 5 s incl. JSON)
+BUDGET_S = 2.5   # model time per call; the judge allows 5 s per call incl. JSON, and laptops/sandboxes vary ~2x
+Z_ALL, COST = None, None
+if isinstance(MODEL, Ensemble):   # speed guard: measure this machine once, then size the ensemble per request
     import time
+    Z_ALL = MODEL.z
     MODEL.rollout(_WARM, [0.0, 1.0], 10)                       # first full call pays one-off costs; time the second
     _t = time.perf_counter(); MODEL.rollout(_WARM, [0.0, 1.0], 10); _dt = time.perf_counter() - _t
-    if _dt > 3.0:
-        MODEL.z = MODEL.z[:max(2, int(len(MODEL.z) * 3.0 / _dt))]
-    print(f"warm 10-step rollout {_dt:.2f} s, using {len(MODEL.z)} members per run", flush=True)
+    COST = _dt / (10 * len(Z_ALL))                              # seconds per member per simulated day (all runs)
+    print(f"warm 10-step rollout {_dt:.2f} s with {len(Z_ALL)} members -> "
+          f"{min(len(Z_ALL), max(2, int(BUDGET_S / (COST * 10))))} members for 10-day calls", flush=True)
+
+
+def members_for(steps: int) -> int:
+    """Same steps -> same member count, so identical requests (and the zero shock) give identical outputs."""
+    return min(len(Z_ALL), max(2, int(BUDGET_S / (COST * max(steps, 1)))))
 
 
 def _arr(x):
@@ -46,6 +54,8 @@ def simulate(init_states: np.ndarray, doy_sincos, steps: int, perturbation) -> n
     Return [steps,6,32,36] physical units. doy_sincos = [sin, cos] of the day of year of init_states[-1]."""
     if init_states.shape != (3, 6, 32, 36) or (perturbation is not None and perturbation.shape != (6, 32, 36)):
         raise ValueError("bad shape")
+    if Z_ALL is not None:
+        MODEL.z = Z_ALL[:members_for(steps)]
     return MODEL.rollout(np.nan_to_num(init_states), doy_sincos, steps, None if perturbation is None else np.nan_to_num(perturbation))
 
 
