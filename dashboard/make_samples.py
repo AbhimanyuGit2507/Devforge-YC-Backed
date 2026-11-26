@@ -1,5 +1,5 @@
 """Build dashboard/samples.json: a handful of real 3-day starting windows (from the training file) plus land mask and a
-monthly rain climatology used by the crop-stress module. Small on purpose: the dashboard drives the live /simulate
+monthly rain climatology used by the crop-stress module. Small on purpose: the dashboard drives the live simulation
 endpoint, it never shows pre-rendered forecasts.
 
     python dashboard/make_samples.py --data data/india_climate_train.nc
