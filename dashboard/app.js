@@ -171,8 +171,9 @@ function render() {
   $("maps").innerHTML = ""; $("kpis").innerHTML = "";
   if (!base) { $("explain").textContent = "Pick a starting state and press Run."; return; }
   const steps = base.steps, k = Math.min(+$("day").value, steps) - 1, c = +$("chan").value, ch = CH[c];
-  $("dayl").textContent = k + 1;
-  const L = land();
+  const L = land(), kk = k + 1;   // impact tabs accumulate "through day kk", so the slider and Play animate them too
+  $("chan").disabled = !(tab === "Weather" || tab === "Ensemble");
+  $("dayl").textContent = tab === "Inverse" ? `${k + 1} (target day for the next search)` : tab === "Weather" || tab === "Ensemble" ? k + 1 : `1–${k + 1}`;
   if (tab === "Weather") {
     triple(R => at(R, k, c).map(ch.conv), ch.cmap, ch.unit, `${ch.name}, day ${k + 1}`);
     const a = at(base.R, k, c).map(ch.conv);
@@ -180,22 +181,22 @@ function render() {
       ...(shock ? [[(mean(at(shock.R, k, c).map(ch.conv)) - mean(a)).toFixed(2) + " " + ch.unit, "shock change (domain mean)"]] : [])]);
     $("explain").textContent = "Day-by-day rollout of the model. The shocked universe starts from the same 3 days plus your shock; the difference map shows the shock staying local, then spreading.";
   } else if (tab === "Heat") {
-    const [a, b] = triple(R => heat(R, steps).map, "heat", "days", `Heat-stress days (index ≥ 33 °C) over ${steps} days`);
+    const [a, b] = triple(R => heat(R, kk).map, "heat", "days", `Heat-stress days (index ≥ 33 °C), days 1–${kk}`);
     const n = x => count(x, v => v >= 3);
-    kpis([[n(a), "land cells with ≥3 heat-stress days (Prime)"], ...(b ? [[n(b), "… in the shocked universe"]] : []), [Math.max(...heat(base.R, steps).peak).toFixed(1) + " °C", "peak heat-stress index"]]);
+    kpis([[n(a), "land cells with ≥3 heat-stress days (Prime)"], ...(b ? [[n(b), "… in the shocked universe"]] : []), [Math.max(...heat(base.R, kk).peak).toFixed(1) + " °C", "peak heat-stress index"]]);
     $("explain").textContent = "Heat-stress index = daily-mean 2 m temperature + 0.25 × (column water vapour − 30), a humidity-weighted proxy; a day ≥ 33 °C daily mean corresponds roughly to IMD heatwave maxima.";
   } else if (tab === "Flood") {
-    const [a, b] = triple(R => flood(R, steps), "rain", "mm", `Max 3-day rainfall over ${steps} days`);
+    const [a, b] = triple(R => flood(R, kk), "rain", "mm", `Max 3-day rainfall, days 1–${kk}`);
     kpis([[count(a, v => v > 100), "cells > 100 mm in 3 days (high risk)"], [count(a, v => v > 50), "cells > 50 mm (moderate)"], ...(b ? [[count(b, v => v > 100) - count(a, v => v > 100), "change in high-risk cells from shock"]] : [])]);
     $("explain").textContent = "Flood risk proxy: largest 3-day accumulated rain per 1° cell. Grid-cell means are much smoother than station rain, so thresholds are lower than IMD station categories.";
   } else if (tab === "Crop") {
-    const [a, b] = triple(R => crop(R, steps), "risk", "stress 0–1", `Kharif crop water-stress index (${steps} days)`);
+    const [a, b] = triple(R => crop(R, kk), "risk", "stress 0–1", `Kharif crop water-stress index, days 1–${kk}`);
     kpis([[(mean(a) * 100).toFixed(0) + "%", "mean land stress (Prime)"], [(count(a, v => v > 0.5) / count(L, v => v > 0.5) * 100).toFixed(0) + "%", "land area under high stress"],
       ...(b ? [[((mean(b) - mean(a)) * 100).toFixed(1) + " pts", "stress change from shock"]] : [])]);
     $("explain").textContent = "Stress = 0.7 × rain deficit versus the month's 2005–2021 climatology + 0.3 × fraction of heat-stress days. Try the monsoon-stall shock.";
   } else if (tab === "Energy") {
-    const [wa, wb] = triple(R => energy(R, steps).wind, "seq", "W/m²", "Wind power density at 100 m");
-    const [sa, sb] = triple(R => energy(R, steps).sun, "heat", "W/m²", "Solar resource (clearness-weighted)");
+    const [wa, wb] = triple(R => energy(R, kk).wind, "seq", "W/m²", `Wind power density at 100 m, mean of days 1–${kk}`);
+    const [sa, sb] = triple(R => energy(R, kk).sun, "heat", "W/m²", `Solar resource (clearness-weighted), days 1–${kk}`);
     kpis([[mean(wa).toFixed(0) + " W/m²", "mean wind power density"], [mean(sa, L).toFixed(0) + " W/m²", "mean solar on land"],
       ...(wb ? [[((mean(wb) / mean(wa) - 1) * 100).toFixed(1) + "%", "wind change from shock"], [((mean(sb, L) / mean(sa, L) - 1) * 100).toFixed(1) + "%", "solar change from shock"]] : [])]);
     $("explain").textContent = "Wind: ½ρv³ with 10 m wind lifted to 100 m by a 1/7 power law. Solar: top-of-atmosphere daily insolation × a clearness factor that drops with moisture and rain.";
@@ -209,7 +210,7 @@ function render() {
     kpis([[r[0].toFixed(1) + " mm", "box rain before"], [r[r.length - 1].toFixed(1) + " mm", "box rain after search"], [inv.target + " mm", "target"], [Math.max(...dT.map(Math.abs)).toFixed(2) + " K", "largest temperature change"]]);
     $("explain").textContent = `Gradient descent through the frozen model found the smallest smooth change to today's weather that pushes day-${inv.day} rain in the box toward ${inv.target} mm.`;
   } else if (tab === "Ensemble") {
-    if (!ens) { $("explain").textContent = "Running ensemble…"; return; }
+    if (!ens) { $("explain").textContent = "Ensemble members are still running in the background (8 extra simulations); this tab fills in automatically."; return; }
     const M = ens.length, mu = new Float32Array(N), sd = new Float32Array(N), pr = new Float32Array(N);
     ens.forEach(R => { const x = at(R, k, c), r = at(R, k, 1); for (let q = 0; q < N; q++) { mu[q] += ch.conv(x[q]) / M; pr[q] += (r[q] > 10) / M; } });
     ens.forEach(R => { const x = at(R, k, c); for (let q = 0; q < N; q++) sd[q] += (ch.conv(x[q]) - mu[q]) ** 2 / M; });
@@ -231,24 +232,30 @@ function smoothNoise(amp) {
   const m = Math.max(...a.map(Math.abs)); return a.map(v => v / m * amp);
 }
 
+let runId = 0;
 async function run() {
+  const id = ++runId;                                       // a newer Run makes older in-flight results stale
   const steps = Math.max(1, Math.min(14, +$("steps").value)); S.cur = S.samples[+$("sample").value];
   const last = flat(S.cur.init_states[2]), pert = perturbation(last);
   $("run").disabled = true; $("status").textContent = "simulating…"; ens = null;
   try {
     const t0 = performance.now();
     const [b, s] = await Promise.all([simulate(S.cur, steps, null), pert ? simulate(S.cur, steps, pert) : null]);
+    if (id !== runId) return;
     base = { ...b, steps }; shock = s && { ...s, steps };
-    $("day").max = steps; $("timing").textContent = `model ${b.ms.toFixed(0)} ms per rollout · round trip ${(performance.now() - t0).toFixed(0)} ms`;
-    $("status").textContent = `live · ${S.cur.name}`; render();
-    ens = (await Promise.all(Array.from({ length: 8 }, () => {
+    $("day").max = steps; if (+$("day").value > steps) $("day").value = steps;
+    $("timing").textContent = `model ${b.ms.toFixed(0)} ms per rollout · round trip ${(performance.now() - t0).toFixed(0)} ms`;
+    $("status").textContent = `live · ${S.cur.name} · ensemble loading…`; $("run").disabled = false; render();
+    const members = await Promise.all(Array.from({ length: 8 }, () => {   // uncertainty runs in the background
       const d = pert ? Float32Array.from(pert) : new Float32Array(NC * N);
       [[0, 0.5], [2, 0.5], [3, 0.5], [5, 1]].forEach(([c, a]) => smoothNoise(a).forEach((v, q) => d[c * N + q] += v));
       return simulate(S.cur, steps, d);
-    }))).map(r => r.R);
+    }));
+    if (id !== runId) return;
+    ens = members.map(r => r.R); $("status").textContent = `live · ${S.cur.name}`;
     if (tab === "Ensemble") render();
-  } catch (e) { $("status").textContent = "error: " + e.message + " — is serve.py running?"; }
-  $("run").disabled = false;
+  } catch (e) { if (id === runId) $("status").textContent = "error: " + e.message + " — is serve.py running?"; }
+  if (id === runId) $("run").disabled = false;
 }
 
 async function inverse() {
