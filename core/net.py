@@ -71,10 +71,10 @@ class MonsoonNet(nn.Module):
         out = []
         for c in range(NC):
             sx = (self.steer[c] * dx).clamp(-MAX_SHIFT, MAX_SHIFT); sy = (self.steer[c] * dy).clamp(-MAX_SHIFT, MAX_SHIFT)
-            jj = torch.arange(W, device=x.device, dtype=x.dtype).view(1, 1, W) - sx
-            ii = torch.arange(H, device=x.device, dtype=x.dtype).view(1, H, 1) - sy
+            jj = (torch.arange(W, device=x.device, dtype=x.dtype).view(1, 1, W) - sx).clamp(0, W - 1)  # clamp = border padding (MPS lacks it)
+            ii = (torch.arange(H, device=x.device, dtype=x.dtype).view(1, H, 1) - sy).clamp(0, H - 1)
             grid = torch.stack([2 * jj / (W - 1) - 1, 2 * ii / (H - 1) - 1], -1)
-            out.append(F.grid_sample(x[:, c:c + 1], grid, mode="bilinear", padding_mode="border", align_corners=True))
+            out.append(F.grid_sample(x[:, c:c + 1], grid, mode="bilinear", padding_mode="zeros", align_corners=True))
         return torch.cat(out, 1)
 
     def forward(self, hist, clim_next, clim_now, aux, cond, wind_ms):
