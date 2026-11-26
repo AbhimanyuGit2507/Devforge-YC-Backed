@@ -16,7 +16,6 @@ from core import data as D
 from core.net import Twin, ZDIM, save_run
 from core.losses import af_crps, spectral, physics, lat_weights
 
-STAGES = [(1, 0.35), (4, 0.40), (10, 0.25)]   # (rollout days, share of the time budget)
 CH_W = torch.tensor([1.0, 1.5, 1.0, 1.0, 1.0, 1.0]).view(1, 1, 6, 1, 1)
 
 
@@ -38,6 +37,8 @@ def main():
     ap.add_argument("--batch", type=int, default=32); ap.add_argument("--members", type=int, default=2)
     ap.add_argument("--lr", type=float, default=1e-3)
     ap.add_argument("--device", default="auto")
+    ap.add_argument("--init", help="resume from a saved run directory (its net.pt)")
+    ap.add_argument("--stages", default="1:0.35,4:0.40,10:0.25", help="rollout_days:share_of_time, comma separated")
     ap.add_argument("--threads", type=int, default=4)
     a = ap.parse_args()
     dev = device_auto(a.device); torch.set_num_threads(a.threads)
@@ -51,6 +52,8 @@ def main():
     xn = D.normalise(data, mean, std)
     clim_n = D.climatology(xn[tr], doy[tr])
     twin = Twin(clim_n, D.statics(static), mean.tolist(), std.tolist(), a.width, a.reach, a.depth).to(dev)
+    if a.init:
+        twin.net.load_state_dict(torch.load(Path(a.init) / "net.pt", map_location="cpu", weights_only=True))
     ema = copy.deepcopy(twin).eval()
     X = torch.from_numpy(xn).to(dev); DOY = torch.from_numpy(doy).long().to(dev)
     RAIN10 = torch.from_numpy(data[:, D.TP] > 10.0).to(dev)
@@ -66,20 +69,22 @@ def main():
         return a.lr * (min(1.0, frac / 0.03) * 0.5 * (1 + math.cos(math.pi * min(frac, 1.0))))
 
     stage_end = 0.0
-    for K, share in STAGES:
+    for K, share in [(int(k), float(f)) for k, f in (x.split(":") for x in a.stages.split(","))]:
         stage_end += share
         starts = torch.from_numpy(D.window_starts(tr, K)).to(dev)
+        if share <= 0: continue
         lead_w = torch.exp(-0.1 * torch.arange(K, device=dev, dtype=torch.float32)); lead_w = (lead_w / lead_w.mean()).view(1, 1, K, 1, 1, 1)
         while (time.time() - t0) < stage_end * budget:
             frac = (time.time() - t0) / budget
             for g in opt.param_groups: g["lr"] = lr_at(frac)
-            i = starts[torch.randint(len(starts), (a.batch,), device=dev)]
+            B = a.batch if K <= 4 else max(4, a.batch * 4 // K)   # long rollouts: smaller batch keeps memory flat (T4 OOM at K=10)
+            i = starts[torch.randint(len(starts), (B,), device=dev)]
             hist = torch.stack([X[i - 2], X[i - 1], X[i]], 1)
             hist = hist + 0.02 * torch.randn_like(hist)                      # pushforward-style input noise
             tgt = torch.stack([X[i + k] for k in range(1, K + 1)], 1)
-            z = torch.randn(a.members, a.batch, ZDIM, device=dev)
+            z = torch.randn(a.members, B, ZDIM, device=dev)
             with torch.autocast("cuda", dtype=torch.float16, enabled=amp):
-                M, B = a.members, a.batch
+                M = a.members
                 h = hist.repeat(M, 1, 1, 1, 1)
                 pred = twin.unroll(h, DOY[i].repeat(M), K, z.reshape(M * B, ZDIM)).view(M, B, K, 6, 32, 36)
             pred = pred.float()
