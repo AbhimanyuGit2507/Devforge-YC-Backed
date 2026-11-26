@@ -151,12 +151,13 @@ class Ensemble:
     """Several trained Twins x fixed noise members. Deterministic: the same input always gives the same output.
     Continuous fields: ensemble mean (+ per-lead post-processing). Rain: probability-matched mean (keeps peaks)."""
 
-    def __init__(self, root: Path, members=2):
+    def __init__(self, root: Path, members=None):
         root = Path(root)
         self.runs = [load_run(d) for d in sorted(root.glob("run_*"))]
-        self.z = member_noise(members)
         pp = root / "postproc.json"
         self.pp = json.loads(pp.read_text()) if pp.exists() else None
+        # CRPS-trained members are individually noisy: the mean needs several of them (set in postproc.json)
+        self.z = member_noise(members or (self.pp or {}).get("members", 8))
 
     @torch.no_grad()
     def members(self, init_states, doy_sincos, steps, perturbation=None):
