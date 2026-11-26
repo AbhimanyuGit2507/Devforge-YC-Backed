@@ -181,6 +181,8 @@ For each, also teach **"why did we choose this instead of the obvious alternativ
   least squares on 2019 (rain excluded). 2020–21: skill 0.115 → 0.134 (full 30 points), shocks 13.9 → 13.6, ≈ 82.5/85.
   Long leads lean on the baseline and climatology (b ≈ 0.9 at day 8), short leads on the ensemble. Two models with
   different errors average better than either (bagging intuition).
+  Then a third seed (s3, Colab, 31,866 steps) was added after it improved 2019 (heavy-rain CSI 0.092 → 0.103).
+  FINAL submitted 2020–21: skill 0.137, heavy-rain CSI skill 0.096, anti-blur 10/10, causality 13.6/15, ≈ 82.9/85, 1.3 s/call.
   Kaggle T4s ran out of memory at the 10-day stage → smaller batch for long rollouts + resume option.
 
 ### B8. Shocks and causality

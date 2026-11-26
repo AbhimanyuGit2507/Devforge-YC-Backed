@@ -12,7 +12,7 @@ train.py            MonsoonNet training (CUDA / Apple MPS / CPU, time-budgeted, 
 fit_postproc.py     per-lead rain scale fitted on 2019 only
 fit_blend.py        per-lead, per-variable blend of ensemble, baseline and climatology, fitted on 2019 only
 evaluate.py         self-evaluation with the organisers' scoring functions (--v2 for the ensemble)
-weights_v2/         submitted ensemble (2 seeds) + climatology/static maps (~30 MB, no LFS needed)
+weights_v2/         submitted ensemble (3 seeds) + climatology/static maps (~30 MB, no LFS needed)
 model.py, weights/, train_baseline.py   first baseline model (used automatically if weights_v2/ is absent)
 dashboard/          interactive map dashboard (static HTML/JS, separate from the server)
 brief/              2-page brief (PDF) and the script that builds it
@@ -23,7 +23,7 @@ brief/              2-page brief (PDF) and the script that builds it
 pip install torch numpy fastapi uvicorn
 python serve.py --port 8000
 ```
-The server loads `weights_v2/` at import (≈2 s), listens on 0.0.0.0 and answers a 10-step `/simulate` in ≈1 s on 4 CPU cores.
+The server loads `weights_v2/` at import (≈2 s), listens on 0.0.0.0 and answers a 10-step `/simulate` in ≈1.3 s on 4 CPU cores.
 Check it with the kit validator: `python -m monsoon_r1.schema_validator http://localhost:8000`.
 
 ## Dashboard
@@ -54,7 +54,8 @@ python dashboard/make_samples.py --data data/india_climate_train.nc   # rebuild 
 |---|---|---|---|---|---|
 | baseline local CNN | 0.103 | 0.084 | 10/10 | 12.6/15 | 31 ms |
 | MonsoonNet ensemble | 0.115 | 0.092 | 10/10 | 13.9/15 | ~0.9 s |
-| **Ensemble + baseline + climatology blend (submitted)** | **0.134** | **0.092** | **10/10** | **13.6/15** | ~0.9 s |
+| Ensemble (2 seeds) + blend | 0.134 | 0.092 | 10/10 | 13.6/15 | ~0.9 s |
+| **Ensemble (3 seeds) + blend (submitted)** | **0.137** | **0.096** | **10/10** | **13.6/15** | ~1.3 s |
 
 ## Model in one paragraph
 MonsoonNet steps one day at a time: a physics core advects every field along the 10 m wind (semi-Lagrangian, ≤ 2 cells/day),
@@ -62,5 +63,5 @@ and a local learned correction (ConvNeXt-style blocks, per-pixel norm, FiLM cond
 the rest. Its measured reach is 5 cells per simulated day, so shocks start local and spread outward and can never teleport.
 It is trained as a CRPS ensemble (2 noise members, almost-fair CRPS) with a spectral anti-blur loss, extra weight on heavy
 rain, a soft physics penalty and a 1 → 4 → 10-day rollout curriculum (anti-drift). Split: train 2005–18, tune 2019, test
-2020–21. Serving averages 2 seeds × 8 fixed noise members (deterministic: a zero shock returns exactly the same rollout). Details, results and failure modes
+2020–21. Serving averages 3 seeds × 8 fixed noise members, then a per-lead blend with the baseline and climatology (fitted on 2019) (deterministic: a zero shock returns exactly the same rollout). Details, results and failure modes
 are in `brief/brief.pdf`.
