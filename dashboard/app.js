@@ -101,27 +101,54 @@ const diff = (a, b) => a.map((v, q) => b[q] - v);
 
 // ---------- drawing ----------
 let drag = null;
+const CELL = 12;                                  // canvas pixels per 1-degree cell
+const CITIES = [["Delhi", 28.6, 77.2, 1], ["Mumbai", 19.1, 72.9, 1], ["Kolkata", 22.6, 88.4, 1], ["Chennai", 13.1, 80.3, 1], ["Bengaluru", 13.0, 77.6, -1], ["Ahmedabad", 23.0, 72.6, -1], ["Guwahati", 26.1, 91.7, 1]];
+const px = lon => (lon - 65) * CELL, py = lat => (38 - lat) * CELL;
+function coastline(g) {  // marching squares on the land fraction at cell centres -> smooth 0.5 contour
+  const L = land(), v = (i, j) => L[i * W + j], cx = j => (j + 0.5) * CELL, cy = i => (H - i - 0.5) * CELL;
+  const lerp = (a, b) => (0.5 - a) / (b - a);
+  g.beginPath();
+  for (let i = 0; i < H - 1; i++) for (let j = 0; j < W - 1; j++) {
+    const a = v(i, j), b = v(i, j + 1), c = v(i + 1, j + 1), d = v(i + 1, j);       // bl, br, tr, tl (north = i+1)
+    const pts = [];
+    if ((a > 0.5) !== (b > 0.5)) pts.push([cx(j) + lerp(a, b) * CELL, cy(i)]);
+    if ((b > 0.5) !== (c > 0.5)) pts.push([cx(j + 1), cy(i) - lerp(b, c) * CELL]);
+    if ((c > 0.5) !== (d > 0.5)) pts.push([cx(j + 1) - lerp(c, d) * CELL, cy(i + 1)]);
+    if ((d > 0.5) !== (a > 0.5)) pts.push([cx(j), cy(i + 1) + lerp(d, a) * CELL]);
+    for (let k = 0; k + 1 < pts.length; k += 2) { g.moveTo(...pts[k]); g.lineTo(...pts[k + 1]); }
+  }
+  g.stroke();
+}
 function drawMap(title, data, cm, lo, hi, unit, box) {
   const wrap = document.createElement("div"); wrap.className = "map";
-  const cv = document.createElement("canvas"); cv.width = W * 8; cv.height = H * 8;
+  const cv = document.createElement("canvas"); cv.width = W * CELL; cv.height = H * CELL;
   const g = cv.getContext("2d"), img = g.createImageData(W, H);
   for (let i = 0; i < H; i++) for (let j = 0; j < W; j++) {
     const v = data[i * W + j], o = ((H - 1 - i) * W + j) * 4, c = isFinite(v) ? color(cm, (v - lo) / (hi - lo)) : [40, 46, 52];
     img.data.set([...c, 255], o); }
   const tmp = document.createElement("canvas"); tmp.width = W; tmp.height = H; tmp.getContext("2d").putImageData(img, 0, 0);
-  g.imageSmoothingEnabled = false; g.drawImage(tmp, 0, 0, W * 8, H * 8);
-  g.strokeStyle = "rgba(0,0,0,.55)"; g.lineWidth = 1.2; // coastline from land mask
-  for (let i = 0; i < H; i++) for (let j = 0; j < W; j++) { const L = land()[i * W + j] > 0.5, y = (H - 1 - i) * 8, x = j * 8;
-    if (j + 1 < W && L !== (land()[i * W + j + 1] > 0.5)) { g.beginPath(); g.moveTo(x + 8, y); g.lineTo(x + 8, y + 8); g.stroke(); }
-    if (i + 1 < H && L !== (land()[(i + 1) * W + j] > 0.5)) { g.beginPath(); g.moveTo(x, y); g.lineTo(x + 8, y); g.stroke(); } }
-  if (box) { g.strokeStyle = "#fff"; g.setLineDash([4, 3]); g.lineWidth = 1.5;
-    const x0 = (box[2] - 65) * 8, x1 = (box[3] - 65) * 8, y0 = (38 - box[1]) * 8, y1 = (38 - box[0]) * 8; g.strokeRect(x0, y0, x1 - x0, y1 - y0); }
+  const cells = $("cells").checked;            // honest 1-degree cells, or a smooth (bilinear) view of the same values
+  g.imageSmoothingEnabled = !cells; g.imageSmoothingQuality = "high"; g.drawImage(tmp, 0, 0, W * CELL, H * CELL);
+  g.strokeStyle = "rgba(255,255,255,.10)"; g.lineWidth = 1;      // 5-degree graticule
+  for (let lon = 70; lon <= 100; lon += 5) { g.beginPath(); g.moveTo(px(lon), 0); g.lineTo(px(lon), H * CELL); g.stroke(); }
+  for (let lat = 10; lat <= 35; lat += 5) { g.beginPath(); g.moveTo(0, py(lat)); g.lineTo(W * CELL, py(lat)); g.stroke(); }
+  g.strokeStyle = "rgba(15,20,24,.85)"; g.lineWidth = 1.6; g.lineJoin = "round"; coastline(g);
+  g.font = "600 10px system-ui, sans-serif"; g.textBaseline = "middle";
+  CITIES.forEach(([n, la, lo2, side]) => { const x = px(lo2), y = py(la), tx = side > 0 ? x + 5 : x - 5 - g.measureText(n).width;
+    g.fillStyle = "#fff"; g.strokeStyle = "rgba(0,0,0,.7)"; g.lineWidth = 2.5; g.beginPath(); g.arc(x, y, 2.6, 0, 7); g.stroke(); g.fill();
+    g.strokeText(n, tx, y); g.fillText(n, tx, y); });
+  g.fillStyle = "rgba(255,255,255,.55)"; g.font = "9px system-ui, sans-serif";
+  for (let lon = 70; lon <= 95; lon += 10) g.fillText(lon + "°E", px(lon) + 2, H * CELL - 7);
+  for (let lat = 10; lat <= 30; lat += 10) g.fillText(lat + "°N", 3, py(lat) - 6);
+  if (box) { g.strokeStyle = "#fff"; g.setLineDash([5, 4]); g.lineWidth = 1.8; g.strokeRect(px(box[2]), py(box[1]), px(box[3]) - px(box[2]), py(box[0]) - py(box[1])); g.setLineDash([]); }
   const toLL = e => { const r = cv.getBoundingClientRect(); return [38 - (e.clientY - r.top) / r.height * H, 65 + (e.clientX - r.left) / r.width * W]; };
   cv.onmousedown = e => { drag = toLL(e); };
   cv.onmouseup = e => { if (!drag) return; const b = toLL(e);
     $("la0").value = Math.round(Math.min(drag[0], b[0])); $("la1").value = Math.round(Math.max(drag[0], b[0]));
     $("lo0").value = Math.round(Math.min(drag[1], b[1])); $("lo1").value = Math.round(Math.max(drag[1], b[1]));
     $("preset").value = "custom"; $("custom").hidden = false; drag = null; render(); };
+  cv.onmousemove = e => { const [la, lo2] = toLL(e), i = Math.floor(la - 6), jj = Math.floor(lo2 - 65);
+    if (i >= 0 && i < H && jj >= 0 && jj < W) cv.title = `${la.toFixed(1)}°N ${lo2.toFixed(1)}°E: ${(+data[i * W + jj]).toFixed(2)} ${unit}`; };
   const f = v => Math.abs(hi - lo) >= 20 ? v.toFixed(0) : v.toFixed(1);
   wrap.innerHTML = `<div class="cap">${title}</div>`; wrap.appendChild(cv);
   wrap.insertAdjacentHTML("beforeend", `<div class="cbar" style="background:${grad(cm)}"></div><div class="cbl"><span>${f(lo)}</span><span>${unit}</span><span>${f(hi)}</span></div>`);
@@ -253,7 +280,7 @@ async function init() {
   TABS.forEach(t => { const b = document.createElement("button"); b.textContent = t; b.className = t === tab ? "on" : "";
     b.onclick = () => { tab = t; [...$("tabs").children].forEach(x => x.className = x === b ? "on" : ""); render(); }; $("tabs").appendChild(b); });
   $("preset").onchange = () => { $("custom").hidden = $("preset").value !== "custom"; };
-  ["day", "chan"].forEach(id => $(id).oninput = render);
+  ["day", "chan", "cells"].forEach(id => $(id).oninput = render);
   $("run").onclick = run; $("inv").onclick = inverse; $("play").onclick = play;
   try { const r = await fetch($("server").value + "/health", { method: "POST" }); const j = await r.json(); $("status").textContent = `${j.status} · ${j.model_name}`; }
   catch { $("status").textContent = "server not reachable — start it with: python serve.py --port 8000"; }
