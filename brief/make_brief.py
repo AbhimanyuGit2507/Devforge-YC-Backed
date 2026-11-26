@@ -73,7 +73,7 @@ with PdfPages(ROOT / a.out) as pdf:
 
     f = plt.figure(figsize=(8.27, 11.69)); ax = f.add_axes([0.07, 0.55, 0.86, 0.42])
     txt(ax, ["# Page 2: visualization and impact",
-             "Dashboard (dashboard/, static HTML/JS, no internet) calls the live /simulate endpoint; nothing is pre-rendered.",
+             "Dashboard (dashboard/, static HTML/JS, no internet) calls the live simulation endpoint; nothing is pre-rendered.",
              "- Timeline Prime vs shocked universe vs difference, any day 1-14; preset or hand-drawn box shocks.",
              "- Inverse shock discovery: pick a region and a rain target; gradient descent through the frozen model finds the",
              "  smallest smooth change to today's weather that produces it. Its first gradient is the adjoint sensitivity map.",
