@@ -11,6 +11,7 @@ import torch.nn.functional as F
 from .net import LAT, LON, TP, doy_index
 
 CHANNELS = (0, 2, 3, 5)   # shock t2m, winds and moisture; rain/pressure follow from the model
+BOUND = (5.0, 5.0, 5.0, 10.0)   # max physical change: 5 K, 5 m/s, 5 m/s, 10 kg/m2 (keeps triggers realistic)
 
 
 def box(lat0, lat1, lon0, lon1):
@@ -35,8 +36,10 @@ def discover(twin, init_states, doy_sincos, target_box, day, target_mm, iters=60
     raw = torch.zeros(1, len(CHANNELS), 32, 36, requires_grad=True)
     opt = torch.optim.Adam([raw], lr=0.05)
     sens, reached = None, []
+    bound = (torch.tensor(BOUND) / twin.std[0, list(CHANNELS), 0, 0]).view(1, -1, 1, 1)   # physical -> normalised
+    shape = lambda r: bound * torch.tanh(smooth(r) / bound)                                # smooth, then softly capped
     for it in range(iters):
-        d = torch.zeros(1, 6, 32, 36); d[:, list(CHANNELS)] = smooth(raw)
+        d = torch.zeros(1, 6, 32, 36); d[:, list(CHANNELS)] = shape(raw)
         hist = torch.cat([hist0[:, :2], (hist0[:, 2] + d)[:, None]], 1)
         rain = twin.to_phys(twin.unroll(hist, doy, day, z))[0, day - 1, TP][m].mean()
         loss = (rain - target_mm) ** 2 / max(target_mm, 1.0) ** 2 + lam * (d ** 2).mean()
@@ -45,6 +48,6 @@ def discover(twin, init_states, doy_sincos, target_box, day, target_mm, iters=60
             sens = raw.grad.abs().sum(1)[0].numpy()
         opt.step(); reached.append(float(rain.detach()))
     with torch.no_grad():
-        d = torch.zeros(1, 6, 32, 36); d[:, list(CHANNELS)] = smooth(raw)
+        d = torch.zeros(1, 6, 32, 36); d[:, list(CHANNELS)] = shape(raw)
         delta = (d * twin.std)[0].numpy()                       # normalised -> physical (rain channel untouched)
     return delta.astype("f4"), (sens / max(sens.max(), 1e-12)).astype("f4"), reached
