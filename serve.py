@@ -11,12 +11,17 @@ from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 import model as twin
+from core.net import Ensemble
+from core.inverse import discover
 
 torch.set_num_threads(4)
 app = FastAPI()
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
-MODEL_NAME = "monsoon-twin-localcnn-v1"
-MODEL = twin.load(Path(__file__).parent / "weights")
+V2 = Path(__file__).parent / "weights_v2"
+if V2.is_dir():   # MonsoonNet ensemble (physics core + local blocks); else the baseline local CNN
+    MODEL_NAME, MODEL = "monsoonnet-ensemble-v2", Ensemble(V2)
+else:
+    MODEL_NAME, MODEL = "monsoon-twin-localcnn-v1", twin.load(Path(__file__).parent / "weights")
 MODEL.rollout(np.full((3, 6, 32, 36), [[[290.0]], [[1.0]], [[0.0]], [[0.0]], [[101000.0]], [[30.0]]], "f4"), [0.0, 1.0], 2)  # warm-up
 
 
@@ -34,6 +39,18 @@ def simulate(init_states: np.ndarray, doy_sincos, steps: int, perturbation) -> n
     if init_states.shape != (3, 6, 32, 36) or (perturbation is not None and perturbation.shape != (6, 32, 36)):
         raise ValueError("bad shape")
     return MODEL.rollout(np.nan_to_num(init_states), doy_sincos, steps, None if perturbation is None else np.nan_to_num(perturbation))
+
+
+@app.post("/inverse")
+async def inverse_endpoint(request: Request):
+    """Demo only: smallest smooth change to today's weather that brings box-mean rain on `day` to `target_mm`.
+    Body: init_states, doy_sincos, box [lat0, lat1, lon0, lon1], day, target_mm. Returns delta [6,32,36] + sensitivity [32,36]."""
+    if not isinstance(MODEL, Ensemble):
+        return {"error": "inverse search needs the v2 ensemble"}
+    b = await request.json()
+    delta, sens, hist = discover(MODEL.runs[0], _arr(b["init_states"]), b["doy_sincos"], tuple(b["box"]), int(b["day"]), float(b["target_mm"]),
+                                 iters=int(b.get("iters", 40)))
+    return {"delta": delta.tolist(), "sensitivity": sens.tolist(), "rain_by_iter": hist}
 
 
 @app.post("/health")
