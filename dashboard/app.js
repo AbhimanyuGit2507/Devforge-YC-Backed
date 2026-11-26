@@ -13,7 +13,7 @@ const TABS = ["Weather", "Heat", "Flood", "Crop", "Energy", "Ensemble", "Inverse
 const TABLABEL = { Weather: "🌦 Weather", Heat: "🔥 Heat stress", Flood: "🌊 Flood risk", Crop: "🌾 Crops", Energy: "⚡ Wind & solar", Ensemble: "🎲 Uncertainty", Inverse: "🎯 Trigger" };
 const TABDESC = {
   Weather: "Day-by-day forecast. Left: real-world forecast (Timeline Prime). Middle: the what-if universe. Right: the difference — red = more, blue = less. Arrows show the 10 m wind.",
-  Heat: "Heat-stress days so far: humidity-adjusted daily temperature ≥ 33 °C on land. Use the day slider or ▶ Play to watch it build up.",
+  Heat: "How hot it feels (heat index, temperature + humidity) — the highest value so far in each land cell. Red = dangerous heat. Use ▶ Play to watch it build.",
   Flood: "Flood risk: the largest 3-day rain total so far in each 110 km cell. More than 100 mm in 3 days = high risk.",
   Crop: "Kharif crop water stress (0 = fine, 1 = severe): rain deficit vs the normal for this month plus heat. Try the weaker-monsoon shock.",
   Energy: "Wind power (top row) and solar resource (bottom row) averaged over the days so far — what the shock means for renewables.",
@@ -81,11 +81,22 @@ async function simulate(sample, steps, pert) {
 }
 
 // ---------- impact models (simple, transparent proxies) ----------
-function heat(R, steps) { // heat-stress index: daily-mean T (°C) raised by humidity; >= 33 counts as a heat-stress day
-  const days = new Float32Array(N), peak = new Float32Array(N).fill(-99);
+function heatIndexC(tc, rh) {  // NWS heat index (Rothfusz regression, Steadman fallback), input/output in °C
+  const t = tc * 9 / 5 + 32;
+  let hi = 0.5 * (t + 61 + (t - 68) * 1.2 + rh * 0.094);
+  if ((hi + t) / 2 >= 80) hi = -42.379 + 2.04901523 * t + 10.14333127 * rh - 0.22475541 * t * rh - 0.00683783 * t * t
+    - 0.05481717 * rh * rh + 0.00122874 * t * t * rh + 0.00085282 * t * rh * rh - 0.00000199 * t * t * rh * rh;
+  return (hi - 32) * 5 / 9;
+}
+function heat(R, steps) { // feels-like temperature from daily-mean T and humidity; land only (sea = NaN)
+  const peak = new Float32Array(N).fill(NaN), days = new Float32Array(N);
+  const es = c => 6.112 * Math.exp(17.62 * c / (243.12 + c));
   for (let k = 0; k < steps; k++) { const T = at(R, k, 0), Q = at(R, k, 5);
-    for (let q = 0; q < N; q++) { const h = T[q] - 273.15 + 0.25 * Math.max(Q[q] - 30, 0); peak[q] = Math.max(peak[q], h); if (h >= 33 && land()[q] > 0.5) days[q]++; } }
-  return { map: days, peak };
+    for (let q = 0; q < N; q++) { if (land()[q] < 0.5) continue;
+      const tc = T[q] - 273.15, td = Math.min(tc, (Math.log(Math.max(Q[q], 1) / 10) - 0.1102) / 0.0614);   // dew point from column water vapour (Reitan 1963)
+      const h = heatIndexC(tc, Math.min(100, 100 * es(td) / es(tc)));
+      peak[q] = isNaN(peak[q]) ? h : Math.max(peak[q], h); if (h >= 41) days[q]++; } }
+  return { map: peak, days };
 }
 function flood(R, steps) { // max 3-day accumulated rain (mm)
   const m = new Float32Array(N);
@@ -94,7 +105,7 @@ function flood(R, steps) { // max 3-day accumulated rain (mm)
   return m;
 }
 function crop(R, steps) { // 0..1 stress on land: rain deficit vs monthly climatology (70%) + heat days (30%)
-  const clim = S.tpClim[S.cur.month - 1], hd = heat(R, steps).map, out = new Float32Array(N);
+  const clim = S.tpClim[S.cur.month - 1], hd = heat(R, steps).days, out = new Float32Array(N);
   for (let q = 0; q < N; q++) { if (land()[q] < 0.5) { out[q] = NaN; continue; }
     let r = 0; for (let k = 0; k < steps; k++) r += at(R, k, 1)[q];
     const c = clim[q] * steps, def = c > steps ? Math.max(0, 1 - r / c) : 0;
@@ -182,7 +193,7 @@ function drawMap(title, data, cm, lo, hi, unit, box, wind) {
     setPreset("custom"); drag = null; render(); };
   cv.onmousemove = e => { const [la, lo2] = toLL(e), i = Math.floor(la - 6), jj = Math.floor(lo2 - 65);
     if (i >= 0 && i < H && jj >= 0 && jj < W) cv.title = `${la.toFixed(1)}°N ${lo2.toFixed(1)}°E: ${(+data[i * W + jj]).toFixed(2)} ${unit}`; };
-  const f = v => Math.abs(hi - lo) >= 20 ? v.toFixed(0) : v.toFixed(1);
+  const f = v => (Math.abs(hi - lo) >= 20 ? v.toFixed(0) : v.toFixed(1)).replace(/^-(0(\.0)?)$/, "$1");
   wrap.innerHTML = `<div class="cap">${title}</div>`; wrap.appendChild(cv);
   const ticks = [0, 0.25, 0.5, 0.75, 1].map(t => `<span style="left:${t * 100}%">${f(lo + t * (hi - lo))}</span>`).join("");
   wrap.insertAdjacentHTML("beforeend", `<div class="cbar" style="background:${grad(cm)}"></div><div class="ticks">${ticks}</div><div class="unit">${unit}</div>`);
@@ -218,10 +229,12 @@ function render() {
       ...(shock ? [[(mean(at(shock.R, k, c).map(ch.conv)) - mean(a)).toFixed(2) + " " + ch.unit, "shock change (domain mean)"]] : [])]);
     $("explain").textContent = "Day-by-day rollout of the model. The shocked universe starts from the same 3 days plus your shock; the difference map shows the shock staying local, then spreading.";
   } else if (tab === "Heat") {
-    const [a, b] = triple(R => heat(R, kk).map, "heat", "days", `Heat-stress days (index ≥ 33 °C), days 1–${kk}`);
-    const n = x => count(x, v => v >= 3);
-    kpis([[n(a), "land cells with ≥3 heat-stress days (Prime)"], ...(b ? [[n(b), "… in the shocked universe"]] : []), [Math.max(...heat(base.R, kk).peak).toFixed(1) + " °C", "peak heat-stress index"]]);
-    $("explain").textContent = "Heat-stress index = daily-mean 2 m temperature + 0.25 × (column water vapour − 30), a humidity-weighted proxy; a day ≥ 33 °C daily mean corresponds roughly to IMD heatwave maxima.";
+    const [a, b] = triple(R => heat(R, kk).map, "heat", "°C feels-like", `Highest feels-like temperature, days 1–${kk}`);
+    const band = (x, lo, hi) => count(x, v => v >= lo && v < hi), land_n = count(L, v => v > 0.5);
+    kpis([[band(a, 41, 99), "land cells in DANGER (≥ 41 °C feels-like)"], [band(a, 32, 41), "land cells in EXTREME CAUTION (32–41 °C)"],
+      ...(b ? [[(band(b, 41, 99) - band(a, 41, 99) >= 0 ? "+" : "") + (band(b, 41, 99) - band(a, 41, 99)), "change in danger cells from the shock"]] : []),
+      [Math.max(...a.filter(v => isFinite(v))).toFixed(1) + " °C", "hottest feels-like anywhere"]]);
+    $("explain").textContent = `Feels-like temperature = US National Weather Service heat index, from the model's daily-mean temperature and humidity (dew point estimated from column water vapour, Reitan 1963). Grey = sea. Bands: 32–41 °C extreme caution, ≥ 41 °C danger. Daily means are cooler than afternoon peaks, so real afternoon values run higher. ${land_n} land cells.`;
   } else if (tab === "Flood") {
     const [a, b] = triple(R => flood(R, kk), "rain", "mm", `Max 3-day rainfall, days 1–${kk}`);
     kpis([[count(a, v => v > 100), "cells > 100 mm in 3 days (high risk)"], [count(a, v => v > 50), "cells > 50 mm (moderate)"], ...(b ? [[count(b, v => v > 100) - count(a, v => v > 100), "change in high-risk cells from shock"]] : [])]);

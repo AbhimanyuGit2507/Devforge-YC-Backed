@@ -153,7 +153,8 @@ with PdfPages(ROOT / a.out) as pdf:
         text(f, 0.05, yb - 0.004, cap, 6.6, MUTE)
     y = head(f, 0.05, 0.365, "Impact modules (prime vs shocked)")
     para(f, 0.05, y, [
-        "- Heat stress: daily-mean T + 0.25 x (tcwv - 30); days >= 33 C on land.",
+        "- Heat stress: NWS heat index (feels-like) from T and humidity (dew point",
+        "  from tcwv, Reitan 1963); bands 32-41 C caution, >= 41 C danger.",
         "- Flood risk: max 3-day accumulated rain; cells > 50 / > 100 mm.",
         "- Kharif crop stress: 0.7 x rain deficit vs monthly climatology",
         "  + 0.3 x heat-day fraction (try the monsoon-stall shock).",
