@@ -328,6 +328,9 @@ function setPreset(p) {
 }
 
 async function init() {
+  // local runs talk to the local server; the hosted dashboard talks to the hosted server; ?server=URL overrides both
+  const qs = new URLSearchParams(location.search).get("server"), local = ["localhost", "127.0.0.1", ""].includes(location.hostname);
+  $("server").value = qs || (local ? "http://localhost:8000" : "https://yc-backed-monsoon.onrender.com");
   S = await (await fetch("samples.json")).json(); S.landFlat = flat(S.land); S.tpClim = S.tp_clim_month.map(flat);
   S.samples.forEach((s, i) => $("sample").insertAdjacentHTML("beforeend", `<option value="${i}">${s.name}</option>`));
   const sd = () => { $("sdesc").textContent = SAMPLEDESC[S.samples[+$("sample").value].name] || ""; };
