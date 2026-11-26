@@ -11,23 +11,27 @@ import xarray as xr
 from monsoon_r1 import scoring as S
 from monsoon_r1.contract import BOX_BAY_OF_BENGAL, BOX_ARABIAN_SEA, LEAD_DAYS
 import model as twin
+from core.net import Ensemble
 
 ap = argparse.ArgumentParser()
 ap.add_argument("--data", default="data/india_climate_train.nc")
 ap.add_argument("--weights", default="weights")
 ap.add_argument("--every", type=int, default=7)
+ap.add_argument("--v2", help="evaluate a core.net.Ensemble directory instead of the baseline weights")
+ap.add_argument("--years", default="test", choices=["test", "val"])
 a = ap.parse_args()
 
 ds = xr.open_dataset(a.data); data = ds["data"].values.astype("f4"); t = ds["time"].to_index()
 std = np.array(ds["data"].std(dim=("time", "lat", "lon")).values, "f4")
 doy = np.minimum(t.dayofyear.values - 1, 364)
-tr = t.year.values < 2020
+tr = t.year.values < (2020 if not a.v2 else 2019)  # climatology reference years
 clim = np.zeros((365,) + data.shape[1:]); cnt = np.zeros(365)
 np.add.at(clim, doy[tr], data[tr]); np.add.at(cnt, doy[tr], 1); clim /= cnt[:, None, None, None]
 clim = np.mean([np.roll(clim, o, 0) for o in range(-7, 8)], 0).astype("f4")
-m = twin.load(Path(a.weights))
+m = Ensemble(a.v2) if a.v2 else twin.load(Path(a.weights))
 
-idx = [i for i in np.where(~tr)[0] if i - 2 >= 0 and not tr[i - 2] and i + 10 < len(t)][::a.every]
+ev = (t.year.values >= 2020) if a.years == "test" else (t.year.values == 2019)
+idx = [i for i in np.where(ev)[0] if ev[i - 2] and i + 10 < len(t) and ev[i + 10]][::a.every]
 ss, cs, ratios, sp, ms = [], [], [], [], []
 for i in idx:
     sc = [float(np.sin(2 * np.pi * (doy[i] + 1) / 365)), float(np.cos(2 * np.pi * (doy[i] + 1) / 365))]

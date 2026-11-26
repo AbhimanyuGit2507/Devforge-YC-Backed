@@ -117,14 +117,13 @@ class Twin(nn.Module):
             outs.append(nxt); hist = torch.cat([hist[:, 1:], nxt[:, None]], 1)
         return torch.stack(outs, 1)
 
-    def to_norm(self, phys):
-        x = phys.clone(); x[..., TP, :, :] = torch.log1p(x[..., TP, :, :].clamp_min(0))
+    def to_norm(self, phys):  # out-of-place so gradients flow (inverse shock search)
+        x = torch.cat([phys[..., :TP, :, :], torch.log1p(phys[..., TP:TP + 1, :, :].clamp_min(0)), phys[..., TP + 1:, :, :]], -3)
         return (x - self.mean) / self.std
 
     def to_phys(self, z):
         x = z * self.std + self.mean
-        x = x.clone(); x[..., TP, :, :] = torch.expm1(x[..., TP, :, :].clamp_max(8.0)).clamp_min(0)
-        return x
+        return torch.cat([x[..., :TP, :, :], torch.expm1(x[..., TP:TP + 1, :, :].clamp_max(8.0)).clamp_min(0), x[..., TP + 1:, :, :]], -3)
 
 
 def member_noise(n, seed=1234):
