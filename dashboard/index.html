@@ -61,6 +61,10 @@ button.ghost{background:transparent;color:var(--ink);border:1px solid var(--line
     <p class="note">Tip: drag on any map to draw the box.</p>
   </div>
   <button id="run">Run simulation</button>
+  <h2 style="margin-top:16px">Inverse shock search</h2>
+  <p class="note">Target: mean rain in the custom box (lat/lon above) on the selected day.</p>
+  <label for="tmm">Target rain (mm/day)</label><input id="tmm" type="number" value="40">
+  <button id="inv" class="ghost">Find the trigger</button>
   <p class="note" id="timing"></p>
 </aside>
 <section>
@@ -69,6 +73,7 @@ button.ghost{background:transparent;color:var(--ink);border:1px solid var(--line
     <div class="row" style="align-items:end">
       <div><label for="chan">Field</label><select id="chan"></select></div>
       <div style="flex:2"><label for="day">Day <span id="dayl">1</span></label><input id="day" type="range" min="1" max="10" value="1"></div>
+      <div style="flex:0 0 90px"><button id="play" class="ghost">▶ Play</button></div>
     </div>
     <div class="kpis" id="kpis"></div>
     <div class="maps" id="maps"></div>

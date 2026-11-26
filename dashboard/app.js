@@ -9,9 +9,9 @@ const CH = [
   { name: "Column water vapour", unit: "kg/m²", conv: v => v, cmap: "rain" },
 ];
 const BOXES = { warm_ocean: [8, 20, 82, 94], monsoon_stall: [8, 20, 65, 75] };
-const TABS = ["Weather", "Heat", "Flood", "Crop", "Energy", "Ensemble"];
+const TABS = ["Weather", "Heat", "Flood", "Crop", "Energy", "Ensemble", "Inverse"];
 const $ = id => document.getElementById(id);
-let S = null, base = null, shock = null, ens = null, tab = "Weather";
+let S = null, base = null, shock = null, ens = null, inv = null, tab = "Weather";
 
 const CMAPS = {
   seq: [[68, 1, 84], [59, 82, 139], [33, 145, 140], [94, 201, 98], [253, 231, 37]],
@@ -172,6 +172,15 @@ function render() {
     kpis([[mean(wa).toFixed(0) + " W/m²", "mean wind power density"], [mean(sa, L).toFixed(0) + " W/m²", "mean solar on land"],
       ...(wb ? [[((mean(wb) / mean(wa) - 1) * 100).toFixed(1) + "%", "wind change from shock"], [((mean(sb, L) / mean(sa, L) - 1) * 100).toFixed(1) + "%", "solar change from shock"]] : [])]);
     $("explain").textContent = "Wind: ½ρv³ with 10 m wind lifted to 100 m by a 1/7 power law. Solar: top-of-atmosphere daily insolation × a clearness factor that drops with moisture and rain.";
+  } else if (tab === "Inverse") {
+    if (!inv) { $("explain").textContent = "Set a box and target on the left, then press 'Find the trigger'."; return; }
+    const dT = flat(inv.delta[0]), dq = flat(inv.delta[5]), sens = flat(inv.sensitivity), b = inv.box;
+    drawMap("Discovered trigger: temperature change today", dT, "div", ...sym(dT), "K", b);
+    drawMap("Discovered trigger: moisture change today", dq, "div", ...sym(dq), "kg/m²", b);
+    drawMap("Sensitivity map (where today matters most)", sens, "seq", 0, 1, "relative", b);
+    const r = inv.rain_by_iter;
+    kpis([[r[0].toFixed(1) + " mm", "box rain before"], [r[r.length - 1].toFixed(1) + " mm", "box rain after search"], [inv.target + " mm", "target"], [Math.max(...dT.map(Math.abs)).toFixed(2) + " K", "largest temperature change"]]);
+    $("explain").textContent = `Gradient descent through the frozen model found the smallest smooth change to today's weather that pushes day-${inv.day} rain in the box toward ${inv.target} mm.`;
   } else if (tab === "Ensemble") {
     if (!ens) { $("explain").textContent = "Running ensemble…"; return; }
     const M = ens.length, mu = new Float32Array(N), sd = new Float32Array(N), pr = new Float32Array(N);
@@ -215,6 +224,28 @@ async function run() {
   $("run").disabled = false;
 }
 
+async function inverse() {
+  S.cur = S.samples[+$("sample").value];
+  const box = ["la0", "la1", "lo0", "lo1"].map(id => +$(id).value), day = +$("day").value, target = +$("tmm").value;
+  $("inv").disabled = true; $("status").textContent = "searching for the trigger…";
+  try {
+    const r = await fetch($("server").value.replace(/\/$/, "") + "/inverse", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ init_states: S.cur.init_states, doy_sincos: S.cur.doy_sincos, box, day, target_mm: target }) });
+    const j = await r.json(); if (j.error) throw new Error(j.error);
+    inv = { ...j, box, day, target }; tab = "Inverse";
+    [...$("tabs").children].forEach(x => x.className = x.textContent === "Inverse" ? "on" : "");
+    $("status").textContent = `live · ${S.cur.name}`; render();
+  } catch (e) { $("status").textContent = "inverse search failed: " + e.message; }
+  $("inv").disabled = false;
+}
+
+let timer = null;
+function play() {
+  if (timer) { clearInterval(timer); timer = null; $("play").textContent = "▶ Play"; return; }
+  $("play").textContent = "❚❚ Pause";
+  timer = setInterval(() => { const d = $("day"); d.value = +d.value >= +d.max ? 1 : +d.value + 1; render(); }, 700);
+}
+
 async function init() {
   S = await (await fetch("samples.json")).json(); S.landFlat = flat(S.land); S.tpClim = S.tp_clim_month.map(flat);
   S.samples.forEach((s, i) => $("sample").insertAdjacentHTML("beforeend", `<option value="${i}">${s.name}</option>`));
@@ -223,7 +254,7 @@ async function init() {
     b.onclick = () => { tab = t; [...$("tabs").children].forEach(x => x.className = x === b ? "on" : ""); render(); }; $("tabs").appendChild(b); });
   $("preset").onchange = () => { $("custom").hidden = $("preset").value !== "custom"; };
   ["day", "chan"].forEach(id => $(id).oninput = render);
-  $("run").onclick = run;
+  $("run").onclick = run; $("inv").onclick = inverse; $("play").onclick = play;
   try { const r = await fetch($("server").value + "/health", { method: "POST" }); const j = await r.json(); $("status").textContent = `${j.status} · ${j.model_name}`; }
   catch { $("status").textContent = "server not reachable — start it with: python serve.py --port 8000"; }
   render();
