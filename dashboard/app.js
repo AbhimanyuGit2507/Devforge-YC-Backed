@@ -10,6 +10,24 @@ const CH = [
 ];
 const BOXES = { warm_ocean: [8, 20, 82, 94], monsoon_stall: [8, 20, 65, 75] };
 const TABS = ["Weather", "Heat", "Flood", "Crop", "Energy", "Ensemble", "Inverse"];
+const TABLABEL = { Weather: "🌦 Weather", Heat: "🔥 Heat stress", Flood: "🌊 Flood risk", Crop: "🌾 Crops", Energy: "⚡ Wind & solar", Ensemble: "🎲 Uncertainty", Inverse: "🎯 Trigger" };
+const TABDESC = {
+  Weather: "Day-by-day forecast. Left: real-world forecast (Timeline Prime). Middle: the what-if universe. Right: the difference — red = more, blue = less. Arrows show the 10 m wind.",
+  Heat: "Heat-stress days so far: humidity-adjusted daily temperature ≥ 33 °C on land. Use the day slider or ▶ Play to watch it build up.",
+  Flood: "Flood risk: the largest 3-day rain total so far in each 110 km cell. More than 100 mm in 3 days = high risk.",
+  Crop: "Kharif crop water stress (0 = fine, 1 = severe): rain deficit vs the normal for this month plus heat. Try the weaker-monsoon shock.",
+  Energy: "Wind power (top row) and solar resource (bottom row) averaged over the days so far — what the shock means for renewables.",
+  Ensemble: "8 slightly nudged copies of the same forecast. Where they disagree (spread), the forecast is uncertain. Right: chance of heavy rain.",
+  Inverse: "Reverse what-if: the smallest change to today's weather that would produce your target rain, and where today's weather matters most.",
+};
+const SAMPLEDESC = {
+  "Monsoon onset (Kerala)": "Early June: the monsoon is arriving over Kerala.",
+  "Peak monsoon, active spell": "Late July: heavy rain along the west coast and central India.",
+  "Pre-monsoon heatwave": "Early June, before the rains: hot and dry across the north.",
+  "Cyclone Fani approach": "Late April / May: a strong cyclone in the Bay of Bengal heading for Odisha.",
+  "Winter western disturbance": "January: a winter storm bringing rain and snow to the north-west.",
+  "Retreating monsoon": "October: the monsoon withdrawing, rain shifting south-east.",
+};
 const $ = id => document.getElementById(id);
 let S = null, base = null, shock = null, ens = null, inv = null, tab = "Weather";
 
@@ -119,7 +137,7 @@ function coastline(g) {  // marching squares on the land fraction at cell centre
   }
   g.stroke();
 }
-function drawMap(title, data, cm, lo, hi, unit, box) {
+function drawMap(title, data, cm, lo, hi, unit, box, wind) {
   const wrap = document.createElement("div"); wrap.className = "map";
   const cv = document.createElement("canvas"); cv.width = W * CELL; cv.height = H * CELL;
   const g = cv.getContext("2d"), img = g.createImageData(W, H);
@@ -133,6 +151,21 @@ function drawMap(title, data, cm, lo, hi, unit, box) {
   for (let lon = 70; lon <= 100; lon += 5) { g.beginPath(); g.moveTo(px(lon), 0); g.lineTo(px(lon), H * CELL); g.stroke(); }
   for (let lat = 10; lat <= 35; lat += 5) { g.beginPath(); g.moveTo(0, py(lat)); g.lineTo(W * CELL, py(lat)); g.stroke(); }
   g.strokeStyle = "rgba(15,20,24,.85)"; g.lineWidth = 1.6; g.lineJoin = "round"; coastline(g);
+  if (wind && $("arrows").checked) {   // 10 m wind arrows every 3 cells, length scaled to the strongest wind shown
+    let ref = 0; for (let q = 0; q < N; q++) ref = Math.max(ref, Math.hypot(wind.u[q], wind.v[q]));
+    ref = Math.max(ref, wind.min || 0.5);
+    for (let pass = 0; pass < 2; pass++) {
+      g.strokeStyle = pass ? "rgba(255,255,255,.92)" : "rgba(0,0,0,.55)"; g.fillStyle = g.strokeStyle; g.lineWidth = pass ? 1.3 : 3;
+      for (let i = 1; i < H; i += 3) for (let jx = 1; jx < W; jx += 3) {
+        const q = i * W + jx, u = wind.u[q], v = wind.v[q], sp = Math.hypot(u, v); if (sp < ref * 0.06) continue;
+        const L = Math.min(1, sp / ref) * 2.6 * CELL, x0 = (jx + 0.5) * CELL, y0 = (H - i - 0.5) * CELL, dx = u / sp * L, dy = -v / sp * L;
+        g.beginPath(); g.moveTo(x0 - dx / 2, y0 - dy / 2); g.lineTo(x0 + dx / 2, y0 + dy / 2); g.stroke();
+        const a = Math.atan2(dy, dx), hx = x0 + dx / 2, hy = y0 + dy / 2, hs = 4 + L * 0.12;
+        g.beginPath(); g.moveTo(hx, hy); g.lineTo(hx - hs * Math.cos(a - 0.45), hy - hs * Math.sin(a - 0.45)); g.lineTo(hx - hs * Math.cos(a + 0.45), hy - hs * Math.sin(a + 0.45)); g.closePath(); g.fill();
+      }
+    }
+    g.fillStyle = "rgba(255,255,255,.75)"; g.font = "10px system-ui, sans-serif"; g.fillText(`longest arrow = ${ref.toFixed(1)} m/s`, W * CELL - 150, 12);
+  }
   g.font = "600 10px system-ui, sans-serif"; g.textBaseline = "middle";
   CITIES.forEach(([n, la, lo2, side]) => { const x = px(lo2), y = py(la), tx = side > 0 ? x + 5 : x - 5 - g.measureText(n).width;
     g.fillStyle = "#fff"; g.strokeStyle = "rgba(0,0,0,.7)"; g.lineWidth = 2.5; g.beginPath(); g.arc(x, y, 2.6, 0, 7); g.stroke(); g.fill();
@@ -146,12 +179,13 @@ function drawMap(title, data, cm, lo, hi, unit, box) {
   cv.onmouseup = e => { if (!drag) return; const b = toLL(e);
     $("la0").value = Math.round(Math.min(drag[0], b[0])); $("la1").value = Math.round(Math.max(drag[0], b[0]));
     $("lo0").value = Math.round(Math.min(drag[1], b[1])); $("lo1").value = Math.round(Math.max(drag[1], b[1]));
-    $("preset").value = "custom"; $("custom").hidden = false; drag = null; render(); };
+    setPreset("custom"); drag = null; render(); };
   cv.onmousemove = e => { const [la, lo2] = toLL(e), i = Math.floor(la - 6), jj = Math.floor(lo2 - 65);
     if (i >= 0 && i < H && jj >= 0 && jj < W) cv.title = `${la.toFixed(1)}°N ${lo2.toFixed(1)}°E: ${(+data[i * W + jj]).toFixed(2)} ${unit}`; };
   const f = v => Math.abs(hi - lo) >= 20 ? v.toFixed(0) : v.toFixed(1);
   wrap.innerHTML = `<div class="cap">${title}</div>`; wrap.appendChild(cv);
-  wrap.insertAdjacentHTML("beforeend", `<div class="cbar" style="background:${grad(cm)}"></div><div class="cbl"><span>${f(lo)}</span><span>${unit}</span><span>${f(hi)}</span></div>`);
+  const ticks = [0, 0.25, 0.5, 0.75, 1].map(t => `<span style="left:${t * 100}%">${f(lo + t * (hi - lo))}</span>`).join("");
+  wrap.insertAdjacentHTML("beforeend", `<div class="cbar" style="background:${grad(cm)}"></div><div class="ticks">${ticks}</div><div class="unit">${unit}</div>`);
   $("maps").appendChild(wrap);
 }
 const range = (...arrs) => { let lo = Infinity, hi = -Infinity; arrs.forEach(a => a && a.forEach(v => { if (isFinite(v)) { lo = Math.min(lo, v); hi = Math.max(hi, v); } })); return [lo, hi === lo ? lo + 1 : hi]; };
@@ -160,22 +194,25 @@ function kpis(list) { $("kpis").innerHTML = list.map(([v, l]) => `<div class="kp
 function curBox() { const p = $("preset").value; return p === "custom" ? ["la0", "la1", "lo0", "lo1"].map(id => +$(id).value) : BOXES[p]; }
 
 // pairs of maps: baseline, shocked, shocked-minus-baseline
-function triple(fn, cm, unit, title, dcm = "div") {
+function triple(fn, cm, unit, title, dcm = "div", wfn = null) {
   const a = fn(base.R), b = shock && fn(shock.R), [lo, hi] = range(a, b);
-  drawMap(`${title} — Timeline Prime`, a, cm, lo, hi, unit);
-  if (b) { drawMap(`${title} — shocked universe`, b, cm, lo, hi, unit, curBox()); const d = diff(a, b), [dl, dh] = sym(d); drawMap(`Shock impact (shocked − prime)`, d, dcm, dl, dh, unit, curBox()); }
+  const wa = wfn && wfn(base.R), wb = wfn && shock && wfn(shock.R);
+  drawMap(shock ? `① Real-world forecast — ${title}` : title, a, cm, lo, hi, unit, null, wa);
+  if (b) { drawMap(`② What-if universe — ${title}`, b, cm, lo, hi, unit, curBox(), wb); const d = diff(a, b), [dl, dh] = sym(d);
+    drawMap(`③ Difference (② − ①): red = more, blue = less`, d, dcm, dl, dh, unit, curBox(), wb && { u: diff(wa.u, wb.u), v: diff(wa.v, wb.v), min: 0.05 }); }
   return [a, b];
 }
 
 function render() {
-  $("maps").innerHTML = ""; $("kpis").innerHTML = "";
-  if (!base) { $("explain").textContent = "Pick a starting state and press Run."; return; }
-  const steps = base.steps, k = Math.min(+$("day").value, steps) - 1, c = +$("chan").value, ch = CH[c];
+  $("maps").innerHTML = ""; $("kpis").innerHTML = ""; $("tabdesc").textContent = TABDESC[tab];
+  if (!base && tab !== "Inverse") { $("maps").innerHTML = `<div class="empty">Choose a starting day (①) and optionally a what-if shock (②), then press <b>▶ Run simulation</b> (③).</div>`; $("explain").textContent = ""; return; }
+  if (!base) { $("maps").innerHTML = inv ? "" : `<div class="empty">Open "Reverse what-if: find the trigger" on the left, set a box and a target, and press <b>Find the trigger</b>.</div>`; }
+  const steps = base ? base.steps : 10, k = Math.min(+$("day").value, steps) - 1, c = +$("chan").value, ch = CH[c];
   const L = land(), kk = k + 1;   // impact tabs accumulate "through day kk", so the slider and Play animate them too
-  $("chan").disabled = !(tab === "Weather" || tab === "Ensemble");
-  $("dayl").textContent = tab === "Inverse" ? `${k + 1} (target day for the next search)` : tab === "Weather" || tab === "Ensemble" ? k + 1 : `1–${k + 1}`;
+  $("chan").disabled = !(tab === "Weather" || tab === "Ensemble"); $("arrows").disabled = tab !== "Weather";
+  $("dayl").textContent = tab === "Weather" || tab === "Ensemble" ? k + 1 : tab === "Inverse" ? "(not used here)" : `1–${k + 1} (totals so far)`;
   if (tab === "Weather") {
-    triple(R => at(R, k, c).map(ch.conv), ch.cmap, ch.unit, `${ch.name}, day ${k + 1}`);
+    triple(R => at(R, k, c).map(ch.conv), ch.cmap, ch.unit, `${ch.name}, day ${k + 1}`, "div", R => ({ u: at(R, k, 2), v: at(R, k, 3) }));
     const a = at(base.R, k, c).map(ch.conv);
     kpis([[mean(a).toFixed(1) + " " + ch.unit, "India-box mean, Prime"], [mean(a, L).toFixed(1) + " " + ch.unit, "land mean, Prime"],
       ...(shock ? [[(mean(at(shock.R, k, c).map(ch.conv)) - mean(a)).toFixed(2) + " " + ch.unit, "shock change (domain mean)"]] : [])]);
@@ -201,7 +238,7 @@ function render() {
       ...(wb ? [[((mean(wb) / mean(wa) - 1) * 100).toFixed(1) + "%", "wind change from shock"], [((mean(sb, L) / mean(sa, L) - 1) * 100).toFixed(1) + "%", "solar change from shock"]] : [])]);
     $("explain").textContent = "Wind: ½ρv³ with 10 m wind lifted to 100 m by a 1/7 power law. Solar: top-of-atmosphere daily insolation × a clearness factor that drops with moisture and rain.";
   } else if (tab === "Inverse") {
-    if (!inv) { $("explain").textContent = "Set a box and target on the left, then press 'Find the trigger'."; return; }
+    if (!inv) { $("explain").textContent = ""; return; }
     const dT = flat(inv.delta[0]), dq = flat(inv.delta[5]), sens = flat(inv.sensitivity), b = inv.box;
     drawMap("Discovered trigger: temperature change today", dT, "div", ...sym(dT), "K", b);
     drawMap("Discovered trigger: moisture change today", dq, "div", ...sym(dq), "kg/m²", b);
@@ -237,7 +274,7 @@ async function run() {
   const id = ++runId;                                       // a newer Run makes older in-flight results stale
   const steps = Math.max(1, Math.min(14, +$("steps").value)); S.cur = S.samples[+$("sample").value];
   const last = flat(S.cur.init_states[2]), pert = perturbation(last);
-  $("run").disabled = true; $("status").textContent = "simulating…"; ens = null;
+  $("run").disabled = true; status("simulating…"); ens = null;
   try {
     const t0 = performance.now();
     const [b, s] = await Promise.all([simulate(S.cur, steps, null), pert ? simulate(S.cur, steps, pert) : null]);
@@ -245,31 +282,31 @@ async function run() {
     base = { ...b, steps }; shock = s && { ...s, steps };
     $("day").max = steps; if (+$("day").value > steps) $("day").value = steps;
     $("timing").textContent = `model ${b.ms.toFixed(0)} ms per rollout · round trip ${(performance.now() - t0).toFixed(0)} ms`;
-    $("status").textContent = `live · ${S.cur.name} · ensemble loading…`; $("run").disabled = false; render();
+    status(`live · ${S.cur.name} · uncertainty loading…`); $("run").disabled = false; guide(4); render();
     const members = await Promise.all(Array.from({ length: 8 }, () => {   // uncertainty runs in the background
       const d = pert ? Float32Array.from(pert) : new Float32Array(NC * N);
       [[0, 0.5], [2, 0.5], [3, 0.5], [5, 1]].forEach(([c, a]) => smoothNoise(a).forEach((v, q) => d[c * N + q] += v));
       return simulate(S.cur, steps, d);
     }));
     if (id !== runId) return;
-    ens = members.map(r => r.R); $("status").textContent = `live · ${S.cur.name}`;
+    ens = members.map(r => r.R); status(`live · ${S.cur.name}`);
     if (tab === "Ensemble") render();
-  } catch (e) { if (id === runId) $("status").textContent = "error: " + e.message + " — is serve.py running?"; }
+  } catch (e) { if (id === runId) status("error: " + e.message + " — is serve.py running?"); }
   if (id === runId) $("run").disabled = false;
 }
 
 async function inverse() {
   S.cur = S.samples[+$("sample").value];
-  const box = ["la0", "la1", "lo0", "lo1"].map(id => +$(id).value), day = +$("day").value, target = +$("tmm").value;
-  $("inv").disabled = true; $("status").textContent = "searching for the trigger…";
+  const box = ["la0", "la1", "lo0", "lo1"].map(id => +$(id).value), day = Math.max(1, Math.min(10, +$("tday").value)), target = +$("tmm").value;
+  $("inv").disabled = true; status("searching for the trigger…");
   try {
     const r = await fetch($("server").value.replace(/\/$/, "") + "/inverse", { method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ init_states: S.cur.init_states, doy_sincos: S.cur.doy_sincos, box, day, target_mm: target }) });
     const j = await r.json(); if (j.error) throw new Error(j.error);
     inv = { ...j, box, day, target }; tab = "Inverse";
-    [...$("tabs").children].forEach(x => x.className = x.textContent === "Inverse" ? "on" : "");
-    $("status").textContent = `live · ${S.cur.name}`; render();
-  } catch (e) { $("status").textContent = "inverse search failed: " + e.message; }
+    [...$("tabs").children].forEach(x => x.className = x.dataset.t === "Inverse" ? "on" : "");
+    status(`live · ${S.cur.name}`); render();
+  } catch (e) { status("inverse search failed: " + e.message); }
   $("inv").disabled = false;
 }
 
@@ -280,17 +317,30 @@ function play() {
   timer = setInterval(() => { const d = $("day"); d.value = +d.value >= +d.max ? 1 : +d.value + 1; render(); }, 700);
 }
 
+function status(t) {
+  const el = $("status"); el.textContent = t;
+  el.className = "pill" + (/^(live|ready)/.test(t) ? " ok" : /error|failed|not reachable/.test(t) ? " err" : "");
+}
+function guide(n) { [1, 2, 3, 4].forEach(i => $("g" + i).className = i <= n ? "on" : ""); }
+function setPreset(p) {
+  $("preset").value = p; $("custom").hidden = p !== "custom";
+  [...$("presets").children].forEach(b => b.classList.toggle("on", b.dataset.p === p)); guide(2);
+}
+
 async function init() {
   S = await (await fetch("samples.json")).json(); S.landFlat = flat(S.land); S.tpClim = S.tp_clim_month.map(flat);
   S.samples.forEach((s, i) => $("sample").insertAdjacentHTML("beforeend", `<option value="${i}">${s.name}</option>`));
+  const sd = () => { $("sdesc").textContent = SAMPLEDESC[S.samples[+$("sample").value].name] || ""; };
+  $("sample").onchange = () => { sd(); guide(1); }; sd();
+  [...$("presets").children].forEach(b => b.onclick = () => setPreset(b.dataset.p));
   CH.forEach((c, i) => $("chan").insertAdjacentHTML("beforeend", `<option value="${i}">${c.name}</option>`));
-  TABS.forEach(t => { const b = document.createElement("button"); b.textContent = t; b.className = t === tab ? "on" : "";
+  TABS.forEach(t => { const b = document.createElement("button"); b.textContent = TABLABEL[t]; b.dataset.t = t; b.className = t === tab ? "on" : "";
     b.onclick = () => { tab = t; [...$("tabs").children].forEach(x => x.className = x === b ? "on" : ""); render(); }; $("tabs").appendChild(b); });
-  $("preset").onchange = () => { $("custom").hidden = $("preset").value !== "custom"; };
-  ["day", "chan", "cells"].forEach(id => $(id).oninput = render);
+  ["day", "chan", "cells", "arrows"].forEach(id => $(id).oninput = render);
   $("run").onclick = run; $("inv").onclick = inverse; $("play").onclick = play;
-  try { const r = await fetch($("server").value + "/health", { method: "POST" }); const j = await r.json(); $("status").textContent = `${j.status} · ${j.model_name}`; }
-  catch { $("status").textContent = "server not reachable — start it with: python serve.py --port 8000"; }
+  render();   // show the guided empty state immediately, before the server answers
+  try { const r = await fetch($("server").value + "/health", { method: "POST" }); const j = await r.json(); status(`${j.status} · ${j.model_name}`); }
+  catch { status("server not reachable — start it with: python serve.py --port 8000"); }
   render();
 }
 init();

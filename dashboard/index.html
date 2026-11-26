@@ -4,83 +4,127 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Monsoon Multiverse</title>
 <style>
-:root{--bg:#0f1418;--panel:#182027;--ink:#e6edf1;--mute:#8da0ad;--accent:#4fb3d9;--line:#2a3640}
+:root{--bg:#0d1216;--panel:#151d24;--panel2:#1b252e;--ink:#e8eef2;--mute:#8fa1ae;--accent:#4fb3d9;--accent2:#f2a65a;--ok:#5cc28a;--line:#26323c}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,-apple-system,Segoe UI,sans-serif}
-header{padding:14px 20px;border-bottom:1px solid var(--line);display:flex;gap:16px;align-items:baseline;flex-wrap:wrap}
-header h1{font-size:18px;margin:0}
-header .status{color:var(--mute);font-size:13px}
-main{display:grid;grid-template-columns:300px 1fr;gap:16px;padding:16px 20px}
-@media (max-width:900px){main{grid-template-columns:1fr}}
-.panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px}
-.panel h2{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--mute);margin:0 0 10px}
+header{padding:12px 20px;border-bottom:1px solid var(--line);display:flex;gap:18px;align-items:center;flex-wrap:wrap}
+header h1{font-size:18px;margin:0;letter-spacing:.2px}
+header .sub{color:var(--mute);font-size:13px}
+.pill{margin-left:auto;font-size:12px;padding:4px 10px;border-radius:999px;background:var(--panel2);border:1px solid var(--line);color:var(--mute)}
+.pill.ok{color:var(--ok);border-color:#2f5a44}.pill.err{color:#f08a7a;border-color:#6a3530}
+.steps{display:flex;gap:6px;padding:10px 20px;border-bottom:1px solid var(--line);flex-wrap:wrap;font-size:13px;color:var(--mute)}
+.steps span{padding:3px 10px;border-radius:6px;background:var(--panel)}
+.steps span.on{background:#1f3a48;color:var(--ink)}
+main{display:grid;grid-template-columns:320px 1fr;gap:16px;padding:16px 20px}
+@media (max-width:980px){main{grid-template-columns:1fr}}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:12px}
+.card h2{font-size:13px;margin:0 0 8px;display:flex;align-items:center;gap:8px}
+.num{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:50%;background:var(--accent);color:#06222e;font-size:12px;font-weight:700}
+.hint{color:var(--mute);font-size:12px;margin:4px 0 0}
 label{display:block;margin:8px 0 3px;color:var(--mute);font-size:12px}
-select,input,button{width:100%;padding:7px 8px;background:#0f1418;color:var(--ink);border:1px solid var(--line);border-radius:6px;font:inherit}
-button{background:var(--accent);color:#06222e;font-weight:600;cursor:pointer;border:none;margin-top:10px}
-button.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+select,input,button{width:100%;padding:7px 8px;background:#0d1216;color:var(--ink);border:1px solid var(--line);border-radius:6px;font:inherit}
+button{cursor:pointer}
+#run{background:var(--accent);color:#06222e;font-weight:700;border:none;padding:10px;font-size:15px}
+#run:disabled{opacity:.6;cursor:wait}
+button.ghost{background:transparent}
 .row{display:flex;gap:8px}.row>*{flex:1}
+.presets{display:grid;gap:6px}
+.preset{text-align:left;padding:8px 10px;border-radius:8px;border:1px solid var(--line);background:#0f161b}
+.preset b{display:block;font-size:13px}.preset small{color:var(--mute);font-size:11.5px}
+.preset.on{border-color:var(--accent);background:#14303d}
+details{margin-top:4px}summary{cursor:pointer;color:var(--ink);font-size:13px;font-weight:600}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px}
+.tabs button{width:auto;margin:0;padding:6px 12px;background:transparent;border:1px solid var(--line)}
+.tabs button.on{background:var(--accent);color:#06222e;border-color:var(--accent);font-weight:600}
+#tabdesc{color:var(--mute);font-size:12.5px;margin:2px 0 10px}
+.controls{display:flex;gap:12px;align-items:end;flex-wrap:wrap}
+.controls>div{flex:1;min-width:160px}
+.check{display:flex;gap:6px;align-items:center;margin:0 0 8px;color:var(--mute);font-size:12.5px;white-space:nowrap}
+.check input{width:auto}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin:12px 0}
+.kpi{background:#0f161b;border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+.kpi b{display:block;font-size:19px}.kpi span{color:var(--mute);font-size:12px}
 .maps{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px}
 .map{max-width:520px}
-.map{position:relative}
-.map canvas{width:100%;aspect-ratio:36/32;border-radius:6px;display:block;background:#000;cursor:crosshair;box-shadow:0 1px 0 rgba(255,255,255,.04)}
-.map .cap{font-size:12px;color:var(--mute);margin:4px 0}
-.cbar{height:10px;border-radius:3px;margin-top:4px}
-.cbl{display:flex;justify-content:space-between;font-size:11px;color:var(--mute)}
-.tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
-.tabs button{width:auto;margin:0;padding:6px 12px;background:transparent;color:var(--ink);border:1px solid var(--line)}
-.tabs button.on{background:var(--accent);color:#06222e;border-color:var(--accent)}
-.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:10px 0}
-.kpi{background:#0f1418;border:1px solid var(--line);border-radius:6px;padding:8px 10px}
-.kpi b{display:block;font-size:20px}.kpi span{color:var(--mute);font-size:12px}
-.note{color:var(--mute);font-size:12px}
+.map canvas{width:100%;aspect-ratio:36/32;border-radius:6px;display:block;background:#000;cursor:crosshair}
+.map .cap{font-size:12.5px;color:var(--ink);margin:4px 0;font-weight:600}
+.cbar{height:10px;border-radius:3px;margin-top:6px}
+.ticks{position:relative;height:16px;font-size:10.5px;color:var(--mute)}
+.ticks span{position:absolute;transform:translateX(-50%);top:2px}
+.ticks span:first-child{transform:none}.ticks span:last-child{transform:translateX(-100%)}
+.unit{font-size:11px;color:var(--mute);text-align:center}
+#explain{color:var(--mute);font-size:12.5px;margin-top:10px}
 #day{width:100%}
+.empty{padding:40px;text-align:center;color:var(--mute);border:1px dashed var(--line);border-radius:10px}
 </style>
 </head>
 <body>
-<header><h1>Monsoon Multiverse — India climate digital twin</h1><span class="status" id="status">connecting…</span></header>
+<header>
+  <h1>Monsoon Multiverse</h1><span class="sub">AI digital twin of India's weather · what happens if…?</span>
+  <span class="pill" id="status">connecting…</span>
+</header>
+<div class="steps" id="guide"><span id="g1" class="on">① Choose a starting day</span><span id="g2">② Choose a what-if shock (optional)</span><span id="g3">③ Run</span><span id="g4">④ Explore the tabs · ▶ Play</span></div>
 <main>
-<aside class="panel">
-  <h2>Timeline</h2>
-  <label for="server">Simulation server</label><input id="server" value="http://localhost:8000">
-  <label for="sample">Starting state (3 real days)</label><select id="sample"></select>
-  <label for="steps">Days to simulate</label><input id="steps" type="number" min="1" max="14" value="10">
-  <h2 style="margin-top:16px">Shock (multiverse branch)</h2>
-  <label for="preset">Preset</label>
-  <select id="preset">
-    <option value="none">No shock (Timeline Prime only)</option>
-    <option value="warm_ocean">Warm Bay of Bengal (+3 K, +15% moisture)</option>
-    <option value="monsoon_stall">Monsoon stall (−40% Arabian Sea wind)</option>
-    <option value="custom">Custom box…</option>
-  </select>
-  <div id="custom" hidden>
-    <label for="cch">Channel</label>
-    <select id="cch"><option value="0">t2m (K)</option><option value="1">tp (mm/day)</option><option value="2">u10 (m/s)</option><option value="3">v10 (m/s)</option><option value="4">msl (Pa)</option><option value="5">tcwv (kg/m²)</option></select>
-    <div class="row"><div><label for="cmode">Mode</label><select id="cmode"><option value="add">Add</option><option value="pct">% of current</option></select></div>
-    <div><label for="cval">Amount</label><input id="cval" type="number" value="3" step="any"></div></div>
-    <div class="row"><div><label for="la0">Lat min</label><input id="la0" type="number" value="8"></div><div><label for="la1">Lat max</label><input id="la1" type="number" value="20"></div></div>
-    <div class="row"><div><label for="lo0">Lon min</label><input id="lo0" type="number" value="82"></div><div><label for="lo1">Lon max</label><input id="lo1" type="number" value="94"></div></div>
-    <p class="note">Tip: drag on any map to draw the box.</p>
+<aside>
+  <div class="card">
+    <h2><span class="num">1</span>Starting weather</h2>
+    <select id="sample" aria-label="Starting weather"></select>
+    <p class="hint" id="sdesc"></p>
+    <label for="steps">Days to simulate</label><input id="steps" type="number" min="1" max="14" value="10">
   </div>
-  <button id="run">Run simulation</button>
-  <h2 style="margin-top:16px">Inverse shock search</h2>
-  <p class="note">Target: mean rain in the custom box (lat/lon above) on the selected day.</p>
-  <label for="tmm">Target rain (mm/day)</label><input id="tmm" type="number" value="40">
-  <button id="inv" class="ghost">Find the trigger</button>
-  <p class="note" id="timing"></p>
-</aside>
-<section>
-  <div class="panel">
-    <div class="tabs" id="tabs"></div>
-    <div class="row" style="align-items:end">
-      <div><label for="chan">Field</label><select id="chan"></select></div>
-      <div style="flex:2"><label for="day">Day <span id="dayl">1</span></label><input id="day" type="range" min="1" max="10" value="1"></div>
-      <div style="flex:0 0 90px"><button id="play" class="ghost">▶ Play</button></div>
-      <div style="flex:0 0 130px"><label style="display:flex;gap:6px;align-items:center;margin:0 0 9px"><input id="cells" type="checkbox" style="width:auto"> Show 1° grid cells</label></div>
+  <div class="card">
+    <h2><span class="num">2</span>What-if shock</h2>
+    <div class="presets" id="presets">
+      <button class="preset on" data-p="none"><b>No shock</b><small>Just forecast the real weather (Timeline Prime)</small></button>
+      <button class="preset" data-p="warm_ocean"><b>Warmer Bay of Bengal</b><small>+3 °C sea-air temperature and +15 % moisture over the Bay</small></button>
+      <button class="preset" data-p="monsoon_stall"><b>Weaker monsoon winds</b><small>−40 % wind over the Arabian Sea (a monsoon stall)</small></button>
+      <button class="preset" data-p="custom"><b>Your own shock</b><small>Pick a variable and amount, then drag a box on any map</small></button>
     </div>
-    <div class="kpis" id="kpis"></div>
-    <div class="maps" id="maps"></div>
-    <p class="note" id="explain"></p>
+    <select id="preset" hidden><option value="none">none</option><option value="warm_ocean">warm</option><option value="monsoon_stall">stall</option><option value="custom">custom</option></select>
+    <div id="custom" hidden>
+      <div class="row"><div><label for="cch">Variable</label>
+        <select id="cch"><option value="0">Temperature (K)</option><option value="1">Rain (mm/day)</option><option value="2">Wind east-west (m/s)</option><option value="3">Wind north-south (m/s)</option><option value="4">Pressure (Pa)</option><option value="5">Moisture (kg/m²)</option></select></div>
+        <div><label for="cmode">Change by</label><select id="cmode"><option value="add">adding</option><option value="pct">percent</option></select></div></div>
+      <label for="cval">Amount</label><input id="cval" type="number" value="3" step="any">
+      <div class="row"><div><label for="la0">Lat from</label><input id="la0" type="number" value="8"></div><div><label for="la1">to</label><input id="la1" type="number" value="20"></div></div>
+      <div class="row"><div><label for="lo0">Lon from</label><input id="lo0" type="number" value="82"></div><div><label for="lo1">to</label><input id="lo1" type="number" value="94"></div></div>
+      <p class="hint">Tip: click-and-drag on any map to set this box.</p>
+    </div>
   </div>
+  <div class="card">
+    <h2><span class="num">3</span>Run</h2>
+    <button id="run">▶ Run simulation</button>
+    <p class="hint" id="timing">Runs the AI model live on this computer (a few seconds).</p>
+  </div>
+  <div class="card">
+    <details id="invcard">
+      <summary>Reverse what-if: find the trigger</summary>
+      <p class="hint">Pick a target instead of a shock: "make it rain 40 mm over Mumbai on day 3". The model works backwards
+        (gradient descent through the frozen network) to find the <b>smallest realistic change to today's weather</b> that
+        would cause it — the trigger — and a map of where today's weather matters most.</p>
+      <label>Region: uses the box in step 2 (choose "Your own shock" and drag a box)</label>
+      <div class="row"><div><label for="tmm">Target rain (mm/day)</label><input id="tmm" type="number" value="40"></div>
+        <div><label for="tday">On day</label><input id="tday" type="number" min="1" max="10" value="3"></div></div>
+      <button id="inv" class="ghost" style="margin-top:10px">Find the trigger</button>
+    </details>
+  </div>
+  <div class="card"><details><summary>Advanced</summary>
+    <label for="server">Simulation server</label><input id="server" value="http://localhost:8000"></details></div>
+</aside>
+<section class="panel">
+  <div class="tabs" id="tabs"></div>
+  <div id="tabdesc"></div>
+  <div class="controls">
+    <div><label for="chan">Variable shown</label><select id="chan"></select></div>
+    <div style="flex:2"><label for="day">Day <span id="dayl">1</span></label><input id="day" type="range" min="1" max="10" value="1"></div>
+    <div style="flex:0 0 100px"><button id="play" class="ghost">▶ Play</button></div>
+    <div style="flex:0 0 auto"><label class="check"><input id="arrows" type="checkbox" checked> Wind arrows</label>
+      <label class="check"><input id="cells" type="checkbox"> Show 1° grid cells</label></div>
+  </div>
+  <div class="kpis" id="kpis"></div>
+  <div class="maps" id="maps"></div>
+  <p id="explain"></p>
 </section>
 </main>
 <script src="app.js"></script>
