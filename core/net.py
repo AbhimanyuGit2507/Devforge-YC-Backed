@@ -175,7 +175,8 @@ class Ensemble:
     def rollout(self, init_states, doy_sincos, steps, perturbation=None) -> np.ndarray:
         ens = self.members(init_states, doy_sincos, steps, perturbation)
         out = ens.mean(0)
-        out[:, TP] = prob_matched_mean(ens[:, :, TP])
+        if (self.pp or {}).get("prob_matched", False):   # sharper rain, but rank re-sorting can jump under small shocks
+            out[:, TP] = prob_matched_mean(ens[:, :, TP])
         if self.pp:
             k = torch.arange(steps).clamp_max(len(self.pp["tp_scale"]) - 1)
             out[:, TP] *= torch.tensor(self.pp["tp_scale"])[k][:, None, None]
