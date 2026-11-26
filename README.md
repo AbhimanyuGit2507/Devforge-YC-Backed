@@ -65,3 +65,10 @@ It is trained as a CRPS ensemble (2 noise members, almost-fair CRPS) with a spec
 rain, a soft physics penalty and a 1 → 4 → 10-day rollout curriculum (anti-drift). Split: train 2005–18, tune 2019, test
 2020–21. Serving averages 3 seeds × 8 fixed noise members, then a per-lead blend with the baseline and climatology (fitted on 2019) (deterministic: a zero shock returns exactly the same rollout). Details, results and failure modes
 are in `brief/brief.pdf`.
+
+## Data and licences
+Training data: `india_climate_train.nc` from the organisers' team kit (v1.0.0, checksums verified against its
+`SHA256SUMS.txt`). Contains modified Copernicus Climate Change Service information (ERA5, Hersbach et al. 2020),
+accessed through Google WeatherBench 2 (Rasp et al. 2024); ERA5 is licensed under CC BY 4.0. The model weights,
+`dashboard/samples.json` (six 3-day starting windows) and the numbers in `eval/` are derived from it.
+Evaluation uses the kit's `monsoon_r1` scoring code (MIT), installed separately and never imported by the server.

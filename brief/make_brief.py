@@ -179,6 +179,7 @@ with PdfPages(ROOT / a.out) as pdf:
     text(f, 0.52, yy - 0.013, "Positive skill on all 8 events; peak rain = forecast / observed max (mm/day, day 2).", 6.1, MUTE)
     y = head(f, 0.05, 0.085, "Reproduce")
     para(f, 0.05, y, ["python serve.py --port 8000   ·   python dashboard/serve_dashboard.py   ·   python train.py --seed 1 --minutes 150",
-                      "python evaluate.py --v2 weights_v2 --years test   ·   python eval/diagnostics.py   ·   details: README.md, docs/DEMO.md"], size=6.6)
+                      "python evaluate.py --v2 weights_v2 --years test   ·   python eval/diagnostics.py   ·   details: README.md, docs/DEMO.md",
+                      "Data: ERA5 (Copernicus C3S, Hersbach et al. 2020) via WeatherBench 2 (Rasp et al. 2024), CC BY 4.0, as provided in the organisers' kit."], size=6.6)
     pdf.savefig(f); plt.close(f)
 print("wrote", a.out)
