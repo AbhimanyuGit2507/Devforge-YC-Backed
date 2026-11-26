@@ -10,6 +10,7 @@ serve.py            inference server (FastAPI, offline, CPU) — POST /health, /
 core/               MonsoonNet: data + splits, network + ensemble, losses, inverse shock search
 train.py            MonsoonNet training (CUDA / Apple MPS / CPU, time-budgeted, resumable)
 fit_postproc.py     per-lead rain scale fitted on 2019 only
+fit_blend.py        per-lead, per-variable blend of ensemble, baseline and climatology, fitted on 2019 only
 evaluate.py         self-evaluation with the organisers' scoring functions (--v2 for the ensemble)
 weights_v2/         submitted ensemble (2 seeds) + climatology/static maps (~30 MB, no LFS needed)
 model.py, weights/, train_baseline.py   first baseline model (used automatically if weights_v2/ is absent)
@@ -43,6 +44,7 @@ mkdir -p data && curl -L -o data/india_climate_train.nc https://github.com/Offic
 python train.py --seed 1 --minutes 150 --out weights_v2/run_s1      # one seed; GPU recommended (T4: ~2.5 h)
 python train.py --seed 1 --init weights_v2/run_s1 --stages 10:1.0 --lr 3e-4 --minutes 45 --out weights_v2/run_s1   # optional 10-day fine-tune
 python fit_postproc.py --weights weights_v2                          # rain scale, fitted on 2019 only
+python fit_blend.py --weights weights_v2                             # blend weights, fitted on 2019 only
 python evaluate.py --v2 weights_v2 --years test                      # needs the monsoon_r1 kit installed
 python dashboard/make_samples.py --data data/india_climate_train.nc   # rebuild dashboard starting states
 ```
@@ -51,7 +53,8 @@ python dashboard/make_samples.py --data data/india_climate_train.nc   # rebuild 
 | | forecast skill | heavy-rain CSI skill | anti-blur | shocks | 10-step latency |
 |---|---|---|---|---|---|
 | baseline local CNN | 0.103 | 0.084 | 10/10 | 12.6/15 | 31 ms |
-| **MonsoonNet ensemble (submitted)** | **0.115** | **0.092** | **10/10** | **13.9/15** | ~0.9 s |
+| MonsoonNet ensemble | 0.115 | 0.092 | 10/10 | 13.9/15 | ~0.9 s |
+| **Ensemble + baseline + climatology blend (submitted)** | **0.134** | **0.092** | **10/10** | **13.6/15** | ~0.9 s |
 
 ## Model in one paragraph
 MonsoonNet steps one day at a time: a physics core advects every field along the 10 m wind (semi-Lagrangian, ≤ 2 cells/day),

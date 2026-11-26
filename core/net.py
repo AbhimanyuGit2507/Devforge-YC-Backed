@@ -172,9 +172,16 @@ class Ensemble:
             outs.append(r.to_phys(r.unroll(hist, torch.full((M,), doy), steps, self.z)))
         return torch.cat(outs, 0)
 
+    def clim_phys(self, doy_sincos, steps):
+        """Physical climatology of each forecast day [steps,6,H,W] (from the first run's training-years climatology)."""
+        r = self.runs[0]; d0 = doy_index(doy_sincos)
+        return r.to_phys(r.clim[[(d0 + k + 1) % 365 for k in range(steps)]])
+
     def rollout(self, init_states, doy_sincos, steps, perturbation=None) -> np.ndarray:
         ens = self.members(init_states, doy_sincos, steps, perturbation)
         out = ens.mean(0)
+        if self.pp and "blend_a" in self.pp:   # per-lead, per-channel linear blend of ensemble, baseline model and climatology
+            out = self.blend(out, init_states, doy_sincos, steps, perturbation)
         if (self.pp or {}).get("prob_matched", False):   # sharper rain, but rank re-sorting can jump under small shocks
             out[:, TP] = prob_matched_mean(ens[:, :, TP])
         if self.pp:
@@ -182,6 +189,23 @@ class Ensemble:
             out[:, TP] *= torch.tensor(self.pp["tp_scale"])[k][:, None, None]
         out[:, 0] = out[:, 0].clamp(240.0, 330.0); out[:, TP] = out[:, TP].clamp_min(0)
         return np.nan_to_num(out.numpy(), nan=0.0, posinf=0.0, neginf=0.0).astype("f4")
+
+
+def _blend(self, out, init_states, doy_sincos, steps, perturbation):
+    """pred = clim + a*(ensemble - clim) + b*(baseline - clim) for every channel except rain; a, b fitted on 2019."""
+    import model as baseline                                     # first model (repo root), loaded lazily once
+    if not hasattr(self, "base"):
+        self.base = baseline.load(Path(__file__).resolve().parents[1] / "weights")
+    B = torch.from_numpy(self.base.rollout(init_states, doy_sincos, steps, perturbation))
+    C = self.clim_phys(doy_sincos, steps)
+    k = torch.arange(steps).clamp_max(len(self.pp["blend_a"]) - 1)
+    a = torch.tensor(self.pp["blend_a"])[k][:, :, None, None]; b = torch.tensor(self.pp["blend_b"])[k][:, :, None, None]
+    mixed = C + a * (out - C) + b * (B - C)
+    keep = torch.zeros(1, NC, 1, 1, dtype=torch.bool); keep[0, TP] = True
+    return torch.where(keep, out, mixed)
+
+
+Ensemble.blend = _blend
 
 
 def prob_matched_mean(r):

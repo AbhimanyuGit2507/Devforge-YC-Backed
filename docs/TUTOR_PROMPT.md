@@ -177,6 +177,10 @@ For each, also teach **"why did we choose this instead of the obvious alternativ
   2020–21 test: skill 0.115, heavy-rain CSI skill 0.092, anti-blur 10/10, causality 13.9/15, ~0.9 s per call (≈81.6/85
   automated vs ≈76 for the baseline). Probability-matched rain was dropped: it broke shock stability (10.0 → 13.9 without it).
   10-day fine-tuned seeds and a 4-checkpoint ensemble tied on 2019 (within noise), so the simpler validated one was kept.
+  Final step: a per-lead, per-variable blend pred = clim + a·(ensemble − clim) + b·(baseline − clim) fitted by
+  least squares on 2019 (rain excluded). 2020–21: skill 0.115 → 0.134 (full 30 points), shocks 13.9 → 13.6, ≈ 82.5/85.
+  Long leads lean on the baseline and climatology (b ≈ 0.9 at day 8), short leads on the ensemble. Two models with
+  different errors average better than either (bagging intuition).
   Kaggle T4s ran out of memory at the 10-day stage → smaller batch for long rollouts + resume option.
 
 ### B8. Shocks and causality
