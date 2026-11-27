@@ -135,6 +135,8 @@ with PdfPages(ROOT / a.out) as pdf:
 
     y = head(f, 0.05, 0.135, "Failure modes we know about")
     para(f, 0.05, y, [
+        "- Learns correlation, not causation: a wind-only Arabian-Sea stall raises offshore rain (seen in data with storms); a physically consistent stall",
+        "  (-40 % wind, -20 % moisture, +2 hPa) cuts west-coast rain by 4-6 mm/day as expected - the dashboard preset uses this coupled version.",
         "- Peak rain under-forecast in convective events (Kerala onset 2020: 26 vs 102 mm/day max; Mumbai Aug 2020: 58 vs 145) - 1 deg daily means smooth cloudbursts.",
         "- Trained on 2005-21; warmer 2023-24 may bias t2m (anomaly inputs + climatology blend reduce, not remove, it).",
         "- Only 10 m wind drives advection: cyclone steering by upper-level winds is learned indirectly (Amphan rain over-forecast 151 vs 91).",

@@ -17,7 +17,7 @@ const TABDESC = {
   Flood: "Flood risk: 3-day rain compared with what is extreme for that place (its own 1-in-100-day total). 1.0 or more = rare, high risk.",
   Crop: "Crop water stress (0 = fine, 1 = severe): rain shortfall vs the normal for this month, plus very hot days. Most useful in the June–September (Kharif) season.",
   Energy: "Indicative wind power (top row) and solar resource (bottom row), averaged over the days so far — what the shock means for renewables.",
-  Ensemble: "8 slightly nudged copies of the same forecast. Where they disagree (spread), the forecast is uncertain. Right: chance of heavy rain.",
+  Ensemble: "How sure is the forecast? Middle: ± uncertainty, calibrated so it matches real past errors. Right: chance of heavy rain.",
   Inverse: "Reverse what-if: the smallest change to today's weather that would produce your target rain, and where today's weather matters most.",
 };
 const SAMPLEDESC = {
@@ -57,7 +57,8 @@ function perturbation(last) {
   if (p === "none") return null;
   let box, set;
   if (p === "warm_ocean") { box = BOXES.warm_ocean; set = (q) => { d[q] = 3; d[5 * N + q] = 0.15 * last[5 * N + q]; }; }
-  else if (p === "monsoon_stall") { box = BOXES.monsoon_stall; set = q => { d[2 * N + q] = -0.4 * last[2 * N + q]; d[3 * N + q] = -0.4 * last[3 * N + q]; }; }
+  else if (p === "monsoon_stall") { box = BOXES.monsoon_stall;   // wind-only cuts are out-of-distribution for a data-driven model (it answers with more offshore rain);
+    set = q => { d[2 * N + q] = -0.4 * last[2 * N + q]; d[3 * N + q] = -0.4 * last[3 * N + q]; d[5 * N + q] = -0.2 * last[5 * N + q]; d[4 * N + q] = 200; }; }  // so weaken moisture and the low too
   else {
     box = ["la0", "la1", "lo0", "lo1"].map(id => +$(id).value);
     const c = +$("cch").value, v = +$("cval").value, pct = $("cmode").value === "pct";
@@ -117,16 +118,16 @@ function crop(R, steps) { // 0..1 stress on land: rain deficit vs the start mont
   return out;
 }
 function energy(R, steps) { // wind power density at 100 m (W/m²) and a solar clearness-weighted insolation index (W/m²)
-  const wind = new Float32Array(N), sun = new Float32Array(N), doy0 = Math.round(Math.atan2(...S.cur.doy_sincos) / 2 / Math.PI * 365 + 365) % 365;
+  const wind = new Float32Array(N), speed = new Float32Array(N), sun = new Float32Array(N), doy0 = Math.round(Math.atan2(...S.cur.doy_sincos) / 2 / Math.PI * 365 + 365) % 365;
   for (let k = 0; k < steps; k++) { const u = at(R, k, 2), v = at(R, k, 3), tp = at(R, k, 1), tw = at(R, k, 5);
     const dec = 23.44 * Math.sin(2 * Math.PI * (284 + doy0 + k + 1) / 365) * Math.PI / 180;
-    for (let q = 0; q < N; q++) { const sp = Math.hypot(u[q], v[q]) * Math.pow(10, 1 / 7);
-      wind[q] += 1.91 * 0.5 * 1.225 * sp ** 3 / steps;   // x1.91 = Weibull (k=2) energy-pattern factor: daily-mean wind hides gusts
+    for (let q = 0; q < N; q++) { const sp = Math.hypot(u[q], v[q]) * Math.pow(10, land()[q] > 0.5 ? 0.2 : 0.11);   // 10 m -> 100 m: shear exponent 0.2 over land, 0.11 offshore
+      speed[q] += sp / steps; wind[q] += 1.91 * 0.5 * 1.225 * sp ** 3 / steps;   // x1.91 = Weibull (k=2) energy-pattern factor: daily-mean wind hides gusts
       const phi = latOf(Math.floor(q / W)) * Math.PI / 180, ws = Math.acos(Math.max(-1, Math.min(1, -Math.tan(phi) * Math.tan(dec))));
       const toa = 1361 / Math.PI * (ws * Math.sin(phi) * Math.sin(dec) + Math.cos(phi) * Math.cos(dec) * Math.sin(ws));
       const clear = Math.max(0.15, Math.min(0.8, 0.8 - 0.004 * tw[q] - 0.35 * (1 - Math.exp(-tp[q] / 5))));
       sun[q] += toa * clear / steps; } }
-  return { wind, sun };
+  return { wind, speed, sun };
 }
 const mean = (a, mask) => { let s = 0, n = 0; a.forEach((v, q) => { if (isFinite(v) && (!mask || mask[q] > 0.5)) { s += v; n++; } }); return n ? s / n : NaN; };
 const count = (a, f) => a.reduce((n, v) => n + (f(v) ? 1 : 0), 0);
@@ -230,9 +231,15 @@ function render() {
   if (tab === "Weather") {
     triple(R => at(R, k, c).map(ch.conv), ch.cmap, ch.unit, `${ch.name}, day ${k + 1}`, "div", R => ({ u: at(R, k, 2), v: at(R, k, 3) }));
     const a = at(base.R, k, c).map(ch.conv);
-    kpis([[mean(a).toFixed(1) + " " + ch.unit, "India-box mean, Prime"], [mean(a, L).toFixed(1) + " " + ch.unit, "land mean, Prime"],
-      ...(shock ? [[(mean(at(shock.R, k, c).map(ch.conv)) - mean(a)).toFixed(2) + " " + ch.unit, "shock change (domain mean)"]] : [])]);
-    $("explain").textContent = "Day-by-day rollout of the model. The shocked universe starts from the same 3 days plus your shock; the difference map shows the shock staying local, then spreading.";
+    const sgn = v => (v >= 0 ? "+" : "") + v.toFixed(2);
+    if (shock) { const d = diff(a, at(shock.R, k, c).map(ch.conv)), bx = curBox(), inb = Float32Array.from({ length: N }, (_, q) => inBox(bx, Math.floor(q / W), q % W) ? 1 : 0);
+      const near = Float32Array.from({ length: N }, (_, q) => { const i = Math.floor(q / W), jx = q % W;   // land within 5 cells (~550 km) of the box
+        return L[q] > 0.5 && latOf(i) >= bx[0] - 5 && latOf(i) <= bx[1] + 5 && lonOf(jx) >= bx[2] - 5 && lonOf(jx) <= bx[3] + 5 ? 1 : 0; });
+      let mx = 0, at_ = 0; d.forEach((v, q) => { if (Math.abs(v) > Math.abs(mx)) { mx = v; at_ = q; } });
+      kpis([[sgn(mean(d, inb)) + " " + ch.unit, "change inside the shock box"], [sgn(mx) + " " + ch.unit, `largest change (${latOf(Math.floor(at_ / W))}°N ${lonOf(at_ % W)}°E)`],
+        [sgn(mean(d, near)) + " " + ch.unit, "change over nearby land (≤ 5 cells from the box)"], [mean(a, L).toFixed(1) + " " + ch.unit, "land average, real-world forecast"]]); }
+    else kpis([[mean(a, L).toFixed(1) + " " + ch.unit, "land average"], [Math.max(...a).toFixed(1) + " " + ch.unit, "highest anywhere"], [Math.min(...a).toFixed(1) + " " + ch.unit, "lowest anywhere"]]);
+    $("explain").textContent = shock ? ($("sustain").checked ? "The shock is held on every day inside its box (like a sea that stays warm); both universes step day by day from the same start, so the difference map is the shock's effect alone." : "One-day shock (as in the official test): the atmosphere relaxes back over a few days because the sea surface itself is unchanged.") : "Day-by-day forecast from the last 3 real days.";
   } else if (tab === "Heat") {
     const [a, b] = triple(R => heat(R, kk).map, "heat", "°C feels-like", `Highest feels-like temperature, days 1–${kk}`);
     const band = (x, lo, hi) => count(x, v => v >= lo && v < hi), land_n = count(L, v => v > 0.5);
@@ -254,11 +261,12 @@ function render() {
       ...(b ? [[((mean(b) - mean(a)) * 100).toFixed(1) + " pts", "stress change from shock"]] : [])]);
     $("explain").textContent = "Stress = 0.7 × rain deficit versus the 2005–2021 normal for each forecast day (interpolated between monthly normals) + 0.3 × share of hot days (daily-mean temperature ≥ 32 °C, roughly afternoon ≥ 38 °C). Dry-season months with little normal rain show no deficit (crops then rely on irrigation). Try the weaker-monsoon shock in June–September.";
   } else if (tab === "Energy") {
-    const [wa, wb] = triple(R => energy(R, kk).wind, "seq", "W/m²", `Wind power density at 100 m, mean of days 1–${kk}`);
+    const [ws] = triple(R => energy(R, kk).speed, "seq", "m/s", `Wind speed at 100 m (hub height), mean of days 1–${kk}`);
+    const wa = energy(base.R, kk).wind, wb = shock && energy(shock.R, kk).wind;
     const [sa, sb] = triple(R => energy(R, kk).sun, "heat", "W/m²", `Solar resource (clearness-weighted), days 1–${kk}`);
-    kpis([[mean(wa).toFixed(0) + " W/m²", "mean wind power density"], [mean(sa, L).toFixed(0) + " W/m²", "mean solar on land"],
+    kpis([[mean(wa, L).toFixed(0) + " W/m²", "wind power density on land (offshore: " + mean(wa.map((v, q) => L[q] > 0.5 ? NaN : v)).toFixed(0) + ")"], [mean(sa, L).toFixed(0) + " W/m²", "mean solar on land"],
       ...(wb ? [[((mean(wb) / mean(wa) - 1) * 100).toFixed(1) + "%", "wind change from shock"], [((mean(sb, L) / mean(sa, L) - 1) * 100).toFixed(1) + "%", "solar change from shock"]] : [])]);
-    $("explain").textContent = "Indicative only. Wind: ½ρv³ at 100 m (10 m wind lifted by a 1/7 power law) × 1.91, the standard Weibull factor that restores the gusts a daily-mean wind hides. Solar: exact top-of-atmosphere daily sunlight × a simple clearness factor that drops with moisture and rain.";
+    $("explain").textContent = "Indicative only. Wind speed at 100 m = 10 m wind × (10)^α with α = 0.2 over land and 0.11 offshore (standard shear exponents); power density ½ρv³ × 1.91, the standard Weibull factor that restores the gusts a daily-mean wind hides. Solar: exact top-of-atmosphere daily sunlight × a simple clearness factor that drops with moisture and rain.";
   } else if (tab === "Inverse") {
     if (!inv) { $("explain").textContent = ""; return; }
     const dT = flat(inv.delta[0]), dq = flat(inv.delta[5]), sens = flat(inv.sensitivity), b = inv.box;
@@ -269,16 +277,13 @@ function render() {
     kpis([[r[0].toFixed(1) + " mm", "box rain before"], [r[r.length - 1].toFixed(1) + " mm", "box rain after search"], [inv.target + " mm", "target"], [Math.max(...dT.map(Math.abs)).toFixed(2) + " K", "largest temperature change"]]);
     $("explain").textContent = `Gradient descent through the frozen model found the smallest smooth change to today's weather that pushes day-${inv.day} rain in the box toward ${inv.target} mm.`;
   } else if (tab === "Ensemble") {
-    if (!ens) { $("explain").textContent = "Ensemble members are still running in the background (8 extra simulations); this tab fills in automatically."; return; }
-    const M = ens.length, mu = new Float32Array(N), sd = new Float32Array(N), pr = new Float32Array(N);
-    ens.forEach(R => { const x = at(R, k, c), r = at(R, k, 1); for (let q = 0; q < N; q++) { mu[q] += ch.conv(x[q]) / M; pr[q] += (r[q] > 10) / M; } });
-    ens.forEach(R => { const x = at(R, k, c); for (let q = 0; q < N; q++) sd[q] += (ch.conv(x[q]) - mu[q]) ** 2 / M; });
-    sd.forEach((v, q) => sd[q] = Math.sqrt(v));
-    drawMap(`${ch.name} ensemble mean, day ${k + 1}`, mu, ch.cmap, ...range(mu), ch.unit);
-    drawMap(`Ensemble spread (std), day ${k + 1}`, sd, "seq", ...range(sd), ch.unit);
-    drawMap(`P(rain > 10 mm/day), day ${k + 1}`, pr, "rain", 0, 1, "probability");
-    kpis([[M, "members"], [mean(sd).toFixed(2) + " " + ch.unit, "mean spread"], [count(pr, v => v >= 0.5), "cells with ≥50% heavy-rain chance"]]);
-    $("explain").textContent = `Each member starts from the same days with small smooth random nudges (±0.5 K, ±0.5 m/s, ±1 kg/m² moisture) plus the current shock. Spread growing with lead time shows where the forecast is uncertain.`;
+    if (!ens) { $("explain").textContent = "Uncertainty is being computed in the background; this tab fills in automatically."; return; }
+    const mu = at(ens.mean, k, c).map(ch.conv), sd = at(ens.std, k, c).map(v => ch.conv(v) - ch.conv(0)), pr = ens.p.subarray(k * N, (k + 1) * N);
+    drawMap(`${ch.name}, day ${k + 1} — forecast`, mu, ch.cmap, ...range(mu), ch.unit);
+    drawMap(`Uncertainty (± 1 std), day ${k + 1}`, sd, "seq", ...range(sd), ch.unit);
+    drawMap(`Chance of heavy rain (> 10 mm/day), day ${k + 1}`, pr, "rain", 0, 1, "probability");
+    kpis([[ens.members, "ensemble members"], [mean(sd).toFixed(2) + " " + ch.unit, "average uncertainty (± 1 std)"], [count(pr, v => v >= 0.5), "cells with ≥ 50 % heavy-rain chance"]]);
+    $("explain").textContent = `Uncertainty comes from the model's own trained ensemble (${ens.members} members: 3 independently trained models × noise members), with its spread calibrated per day and variable on 2019 so that ± 1 std matches the real forecast error (checked on unseen 2020–21: spread/error 0.89–1.05). Includes the current shock.`;
   }
 }
 
@@ -299,19 +304,23 @@ async function run() {
   $("run").disabled = true; status("simulating…"); ens = null;
   try {
     const t0 = performance.now();
-    const [b, s] = await Promise.all([simulate(S.cur, steps, null), pert ? simulate(S.cur, steps, pert) : null]);
+    let b, s;
+    if (pert && $("sustain").checked) {   // server holds the shock every day and returns its matched baseline
+      const body = { init_states: S.cur.init_states, doy_sincos: S.cur.doy_sincos, steps, perturbation: toNested(pert, [NC, H, W]), sustained: true };
+      const r = await fetch($("server").value.replace(/\/$/, "") + "/simulate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      if (!r.ok) throw new Error("server " + r.status);
+      const jj = await r.json(); b = { R: flat(jj.baseline), ms: jj.inference_ms }; s = { R: flat(jj.rollout), ms: jj.inference_ms };
+    } else [b, s] = await Promise.all([simulate(S.cur, steps, null), pert ? simulate(S.cur, steps, pert) : null]);
     if (id !== runId) return;
     base = { ...b, steps }; shock = s && { ...s, steps };
     $("day").max = steps; if (+$("day").value > steps) $("day").value = steps;
     $("timing").textContent = `model ${b.ms.toFixed(0)} ms per rollout · round trip ${(performance.now() - t0).toFixed(0)} ms`;
     status(`live · ${S.cur.name} · uncertainty loading…`); $("run").disabled = false; guide(4); render();
-    const members = await Promise.all(Array.from({ length: 8 }, () => {   // uncertainty runs in the background
-      const d = pert ? Float32Array.from(pert) : new Float32Array(NC * N);
-      [[0, 0.5], [2, 0.5], [3, 0.5], [5, 1]].forEach(([c, a]) => smoothNoise(a).forEach((v, q) => d[c * N + q] += v));
-      return simulate(S.cur, steps, d);
-    }));
+    const body = { init_states: S.cur.init_states, doy_sincos: S.cur.doy_sincos, steps, perturbation: pert ? toNested(pert, [NC, H, W]) : null };
+    const er = await fetch($("server").value.replace(/\/$/, "") + "/ensemble", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const ej = await er.json();   // calibrated uncertainty from the model's own trained ensemble (one call)
     if (id !== runId) return;
-    ens = members.map(r => r.R); status(`live · ${S.cur.name}`);
+    ens = ej.error ? null : { mean: flat(ej.mean), std: flat(ej.std), p: flat(ej.p_rain10), members: ej.members }; status(`live · ${S.cur.name}`);
     if (tab === "Ensemble") render();
   } catch (e) { if (id === runId) status("error: " + e.message + " — is serve.py running?"); }
   if (id === runId) $("run").disabled = false;

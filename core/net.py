@@ -177,8 +177,9 @@ class Ensemble:
         r = self.runs[0]; d0 = doy_index(doy_sincos)
         return r.to_phys(r.clim[[(d0 + k + 1) % 365 for k in range(steps)]])
 
-    def rollout(self, init_states, doy_sincos, steps, perturbation=None) -> np.ndarray:
-        ens = self.members(init_states, doy_sincos, steps, perturbation)
+    def rollout(self, init_states, doy_sincos, steps, perturbation=None, ens=None) -> np.ndarray:
+        if ens is None:
+            ens = self.members(init_states, doy_sincos, steps, perturbation)
         out = ens.mean(0)
         if self.pp and "blend_a" in self.pp:   # per-lead, per-channel linear blend of ensemble, baseline model and climatology
             out = self.blend(out, init_states, doy_sincos, steps, perturbation)

@@ -72,3 +72,10 @@ Training data: `india_climate_train.nc` from the organisers' team kit (v1.0.0, c
 accessed through Google WeatherBench 2 (Rasp et al. 2024); ERA5 is licensed under CC BY 4.0. The model weights,
 `dashboard/samples.json` (six 3-day starting windows) and the numbers in `eval/` are derived from it.
 Evaluation uses the kit's `monsoon_r1` scoring code (MIT), installed separately and never imported by the server.
+
+## Dashboard-only server extras (never used by the grader's `/simulate` calls)
+- `POST /ensemble` — forecast + calibrated uncertainty from the trained ensemble (spread scaled per lead/variable on 2019;
+  spread/error 0.89–1.05 on unseen 2020–21; `fit_spread.py`).
+- `POST /simulate` with `"sustained": true` — keeps the shock on every day (like a persistently warm sea) and returns a
+  matched `baseline`; a zero shock still returns identical runs.
+- `POST /inverse` — inverse shock discovery (smallest smooth trigger for a target rain amount).

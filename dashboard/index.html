@@ -78,7 +78,7 @@ details{margin-top:4px}summary{cursor:pointer;color:var(--ink);font-size:13px;fo
     <div class="presets" id="presets">
       <button class="preset on" data-p="none"><b>No shock</b><small>Just forecast the real weather (Timeline Prime)</small></button>
       <button class="preset" data-p="warm_ocean"><b>Warmer Bay of Bengal</b><small>+3 °C sea-air temperature and +15 % moisture over the Bay</small></button>
-      <button class="preset" data-p="monsoon_stall"><b>Weaker monsoon winds</b><small>−40 % wind over the Arabian Sea (a monsoon stall)</small></button>
+      <button class="preset" data-p="monsoon_stall"><b>Monsoon stall</b><small>Arabian Sea: −40 % wind, −20 % moisture, +2 hPa pressure (a weaker monsoon, physically consistent)</small></button>
       <button class="preset" data-p="custom"><b>Your own shock</b><small>Pick a variable and amount, then drag a box on any map</small></button>
     </div>
     <select id="preset" hidden><option value="none">none</option><option value="warm_ocean">warm</option><option value="monsoon_stall">stall</option><option value="custom">custom</option></select>
@@ -94,6 +94,7 @@ details{margin-top:4px}summary{cursor:pointer;color:var(--ink);font-size:13px;fo
   </div>
   <div class="card">
     <h2><span class="num">3</span>Run</h2>
+    <label class="check" style="white-space:normal;margin-bottom:10px"><input id="sustain" type="checkbox" checked> Keep the shock on every day (like a sea that stays warm). Off = a one-day kick, as in the official test.</label>
     <button id="run">▶ Run simulation</button>
     <p class="hint" id="timing">Runs the AI model live on this computer (a few seconds).</p>
   </div>
