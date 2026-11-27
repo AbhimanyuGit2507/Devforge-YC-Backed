@@ -152,7 +152,7 @@ with PdfPages(ROOT / a.out) as pdf:
     text(f, 0.05, 0.975, "Monsoon Multiverse", 17, INK, "bold")
     text(f, 0.95, 0.975, "Team: YC backed", 11, ACC, "bold", ha="right")
     text(f, 0.05, 0.952, "page 2: visualization, multiverse shocks and impact  ·  dashboard drives the live server - nothing is pre-rendered", 8.2, MUTE)
-    for k, (shot, cap, yb) in enumerate([("dashboard.png", "Timeline Prime vs warm-Bay universe vs difference (rain, day 4). The shock stays local, then spreads.", 0.665),
+    for k, (shot, cap, yb) in enumerate([("dashboard.png", "Timeline Prime vs warm-Bay universe vs difference (rain, day 4). The shock stays local, then spreads. Starting days include Amphan, Nisarga, Tauktae and Yaas.", 0.665),
                                           ("dashboard_inverse.png", "Inverse shock discovery: smallest smooth change today that brings Mumbai-box rain to 40 mm on day 3, plus the sensitivity map.", 0.39)]):
         axs = f.add_axes([0.05, yb, 0.9, 0.255]); axs.imshow(plt.imread(ROOT / "brief" / shot)); axs.axis("off")
         text(f, 0.05, yb - 0.004, cap, 6.6, MUTE)

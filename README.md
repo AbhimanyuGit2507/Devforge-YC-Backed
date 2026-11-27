@@ -5,6 +5,9 @@ from the last 3 days (t2m, rain, u10, v10, msl, tcwv on the 32 × 36 1° grid), 
 local shock is applied. A browser dashboard drives it live and turns the rollouts into heat, flood, crop, energy and
 ensemble-uncertainty impacts.
 
+**Team YC backed:** Abhimanyu ([@AbhimanyuGit2507](https://github.com/AbhimanyuGit2507)) ·
+Bhavik Jain ([@bhavik-J](https://github.com/bhavik-J))
+
 ```
 serve.py            inference server (FastAPI, offline, CPU) — POST /health, /simulate, /inverse
 core/               MonsoonNet: data + splits, network + ensemble, losses, inverse shock search
@@ -39,7 +42,8 @@ Check it with the kit validator: `python -m monsoon_r1.schema_validator http://l
 python serve.py --port 8000            # terminal 1: the model
 python dashboard/serve_dashboard.py    # terminal 2: http://localhost:8080
 ```
-Pick a starting state (real 3-day windows), choose a preset shock (warm Bay of Bengal, monsoon stall) or draw your own
+Pick a starting state (real 3-day windows, including the brief's named events: cyclones Amphan, Nisarga, Tauktae, Yaas
+and the Mumbai extreme rain of Aug 2020, each 2 days before its peak), choose a preset shock (warm Bay of Bengal, monsoon stall) or draw your own
 box on any map, press **Run**. Every map is computed in the browser from the live `/simulate` output:
 Weather (prime / shocked / difference by day), Heat stress, Flood risk, Kharif crop water stress, Wind & solar energy,
 and Uncertainty (the trained 24-member ensemble with spread calibrated on 2019: ± std and heavy-rain probability). Shocks can be a one-day kick (as in the official test) or held every day (like a sea that stays warm). No internet or CDN is needed.
@@ -90,6 +94,8 @@ Evaluation uses the kit's `monsoon_r1` scoring code (MIT), installed separately 
 
 ## Tests
 ```bash
+python -m monsoon_r1.schema_validator http://localhost:8000   # kit validator: both wire formats, shocks, 5 s limit
+python -c "from monsoon_r1.repo_scan import scan; print(scan('.'))"   # kit repo check (15/15, no flags)
 python tests/scenarios.py     # 20 scenario checks: physical ranges, shock signs/locality, zero shock, uncertainty, inverse
 python tests/check_maps.py    # 43 checks: every dashboard map formula (run from dashboard/app.js in Node) vs an independent
                               # NumPy implementation, plus NWS heat-index table and top-of-atmosphere sunlight reference values

@@ -19,6 +19,11 @@ script as a backup. The header badge must read `ready · monsoonnet-ensemble-v2`
 - Say: "Information can only move about 5 cells (~550 km) a day, so the effect starts in the box and spreads. Untick the
   box to see the official one-day kick: it relaxes in a few days because the sea surface itself is unchanged."
 
+## 2b. A real cyclone (optional, 45 s)
+- Card ① **Cyclone Amphan (Bay of Bengal, May 2020)**, card ② **No shock**, ▶ Run. Variable **Precipitation**, day 2-3.
+- Say: "Started two days before landfall, on years the model never trained on: the rain band reaches Kolkata and
+  Bangladesh. Skill is positive on all 8 named events in the brief; peaks are under-forecast at 1° daily resolution."
+
 ## 3. Judges' own shock (60 s)
 - Card ② **Your own shock**: choose variable, amount, then **drag a box on any map**. ▶ Run.
 - Zero shock: amount 0 → every KPI shows +0.00 (deterministic model).
