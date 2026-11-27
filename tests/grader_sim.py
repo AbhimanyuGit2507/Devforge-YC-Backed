@@ -4,7 +4,7 @@ over HTTP (once each, 5 s timeout), and score them with the kit's own functions.
 
     python tests/grader_sim.py --repo /path/to/fresh/clone --data data/india_climate_train.nc
 """
-import argparse, json, os, subprocess, sys, time, urllib.request
+import argparse, atexit, json, os, resource, subprocess, sys, time, urllib.request
 import datetime as dt
 from pathlib import Path
 import numpy as np, xarray as xr
@@ -25,6 +25,7 @@ ROUTE = "simu" + "late"                     # split so the organisers' repo scan
 env = dict(os.environ, OMP_NUM_THREADS="4", MKL_NUM_THREADS="4")
 t0 = time.time(); srv = subprocess.Popen([sys.executable, "serve.py", "--port", str(a.port)], cwd=a.repo, env=env,
                                          stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+atexit.register(srv.kill)   # never leave the server running if a check crashes
 def post(path, body, timeout):
     r = urllib.request.Request(URL + path, json.dumps(body).encode(), {"Content-Type": "application/json"}, method="POST")
     return json.load(urllib.request.urlopen(r, timeout=timeout))
@@ -38,7 +39,7 @@ def check(name, ok, detail=""): print(f"{'PASS' if ok else 'FAIL'}  {name}  {det
 check("server ready within 120 s", ready is not None, f"{ready:.1f} s" if ready else "")
 
 def ask(i, pert=None):
-    body = {"init_states": data[i - 2:i + 1].tolist(), "doy_sincos": doy_sincos(t[i].dayofyear), "steps": 10,
+    body = {"init_states": data[i - 2:i + 1].tolist(), "doy_sincos": doy_sincos(t[i].day_of_year), "steps": 10,
             "perturbation": None if pert is None else pert.tolist()}
     s = time.time(); out = np.array(post("/" + ROUTE, body, 5.0)["rollout"], "f4"); return out, time.time() - s
 
@@ -62,8 +63,8 @@ for name, box in (("warm_ocean", BOX_BAY_OF_BENGAL), ("monsoon_stall", BOX_ARABI
 out, sec = ask(i, np.zeros((6, 32, 36), "f4")); null_ok = S.null_consistent(base, out, std)
 check("zero shock changes nothing", null_ok and sec < 5, f"{sec:.2f} s  max diff {np.abs(out - base).max():.2e}")
 
-rss = int(next(l.split()[1] for l in open(f"/proc/{srv.pid}/status") if l.startswith("VmHWM"))) / 1024 ** 2
-srv.terminate(); check("peak server memory < 6 GB", rss < 6, f"{rss:.2f} GB")
+srv.terminate(); srv.wait()   # peak RSS of the reaped server; ru_maxrss is KB on Linux, bytes on macOS
+rss = resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss / (1024 ** 3 if sys.platform == "darwin" else 1024 ** 2); check("peak server memory < 6 GB", rss < 6, f"{rss:.2f} GB")
 fp = S.forecast_points(ss, cs); blur = S.anti_blur_points(np.array(ratios)); caus = S.causality_points(shocks, null_ok); repo = scan(Path(a.repo))["points"]
 gate = not [f for f in fails if "valid" in f or "zero" in f] and float(np.mean(sp4)) > 0 and any(r["nonzero"] and r["localized"] for r in shocks)
 print(f"\nQUALIFICATION GATE: {'PASS' if gate else 'FAIL'}  (8/8 valid, day-4 skill vs persistence {np.mean(sp4):+.3f}, a localized shock)")
