@@ -72,7 +72,8 @@ def diagram(ax):
     arrow(2.3, 3.3, 3.0, 3.5); arrow(2.3, 3.0, 3.0, 2.3); arrow(6.0, 3.5, 6.7, 3.0); arrow(6.0, 2.3, 6.7, 2.7); arrow(7.9, 2.8, 8.3, 2.8)
     ax.text(9.15, 2.15, "feeds back as input", ha="center", va="top", fontsize=5.8, color=MUTE, style="italic")
     box(0.0, 0.55, 10.0, 0.95, "Serving: 3 seeds x 8 fixed noise members, averaged (deterministic: zero shock = identical output)  ->  per-lead blend\n"
-        "clim + a(ensemble - clim) + b(baseline - clim), fitted on 2019  ->  rain >= 0, t2m clamped, NaN-safe  ->  ~1-2 s per 10-day call on 4 CPU cores", "#eef3f8")
+        "clim + a(ensemble - clim) + b(baseline - clim), fitted on 2019  ->  rain >= 0, t2m clamped, NaN-safe  ->  1.3-2.8 s per 10-day call on 4 cores\n"
+        "speed guard: times this CPU at startup and drops noise members to fit 2.5 s (all 8 on 4 cores; < 2 s per 10-day call even on 1 core)", "#eef3f8")
 
 
 with PdfPages(ROOT / a.out) as pdf:

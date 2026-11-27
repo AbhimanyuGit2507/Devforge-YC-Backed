@@ -16,6 +16,12 @@ WINDOWS = {  # name -> last input day
     "Cyclone Fani approach": "2019-05-01",
     "Winter western disturbance": "2020-01-14",
     "Retreating monsoon": "2020-10-10",
+    # named events from the brief (eval/diagnostics.py): last input day = 2 days before the peak
+    "Cyclone Amphan (Bay of Bengal, May 2020)": "2020-05-18",
+    "Cyclone Nisarga (Arabian Sea, Jun 2020)": "2020-06-01",
+    "Mumbai extreme rain (Aug 2020)": "2020-08-03",
+    "Cyclone Tauktae (Arabian Sea, May 2021)": "2021-05-14",
+    "Cyclone Yaas (Bay of Bengal, May 2021)": "2021-05-23",
 }
 
 ap = argparse.ArgumentParser(); ap.add_argument("--data", default="data/india_climate_train.nc"); a = ap.parse_args()

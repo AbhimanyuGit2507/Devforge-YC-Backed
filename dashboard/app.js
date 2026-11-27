@@ -38,6 +38,11 @@ const SAMPLEDESC = {
   "Cyclone Fani approach": "Late April / May: a strong cyclone in the Bay of Bengal heading for Odisha.",
   "Winter western disturbance": "January: a winter storm bringing rain and snow to the north-west.",
   "Retreating monsoon": "October: the monsoon withdrawing, rain shifting south-east.",
+  "Cyclone Amphan (Bay of Bengal, May 2020)": "Super cyclone heading for West Bengal and Bangladesh; landfall 20 May 2020.",
+  "Cyclone Nisarga (Arabian Sea, Jun 2020)": "Rare Arabian Sea cyclone that hit the Maharashtra coast near Mumbai on 3 June 2020.",
+  "Mumbai extreme rain (Aug 2020)": "Early August 2020: very heavy monsoon rain over Mumbai and the Konkan coast.",
+  "Cyclone Tauktae (Arabian Sea, May 2021)": "Strong cyclone running up the west coast to Gujarat; landfall 17 May 2021.",
+  "Cyclone Yaas (Bay of Bengal, May 2021)": "Bay of Bengal cyclone that hit Odisha on 26 May 2021.",
 };
 const $ = id => document.getElementById(id);
 let S = null, base = null, shock = null, ens = null, inv = null, tab = "Weather";

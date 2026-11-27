@@ -20,10 +20,18 @@ brief/              2-page brief (PDF) and the script that builds it
 
 ## Run (what the judges do)
 ```bash
-pip install torch numpy fastapi uvicorn
+pip install torch --index-url https://download.pytorch.org/whl/cpu   # CPU-only build (~200 MB instead of GBs of CUDA)
+pip install numpy fastapi uvicorn
 python serve.py --port 8000
 ```
+Tested with Python 3.13 and torch 2.15 (CPU); any torch >= 2.0 should work. Startup takes ~10-15 s (weights + speed test)
+before `/health` answers.
 The server loads `weights_v2/` at import (≈2 s), listens on 0.0.0.0 and answers a 10-step `/simulate` in ≈1.3 s on 4 CPU cores.
+**Speed guard:** at startup the server times a few 10-day rollouts on this machine (fastest of 3) and then uses as many of
+the 8 noise members (× 3 seeds) as fit a 2.5 s model budget per request, with threads = min(4, available cores). On 4 cores
+all members run (≈1.3–2.8 s per call, depending on the CPU); slower machines use fewer members, which keeps every call under
+the 5 s limit at a small cost in skill (measured: 10-day calls under 2 s on 1 core, 2.5 s on 2 cores). The member count depends only on
+`steps`, so identical requests and the zero shock still give identical outputs.
 Check it with the kit validator: `python -m monsoon_r1.schema_validator http://localhost:8000`.
 
 ## Dashboard
