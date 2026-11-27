@@ -49,7 +49,23 @@ details{margin-top:4px}summary{cursor:pointer;color:var(--ink);font-size:13px;fo
 .maps{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px}
 .map{max-width:520px}
 .map canvas{width:100%;aspect-ratio:36/32;border-radius:6px;display:block;background:#000;cursor:crosshair}
-.map .cap{font-size:12.5px;color:var(--ink);margin:4px 0;font-weight:600}
+.map .cap{font-size:12.5px;color:var(--ink);margin:4px 0;font-weight:600;display:flex;gap:8px;align-items:flex-start;justify-content:space-between}
+.zoom{width:auto;padding:2px 8px;font-size:14px;line-height:1.2;background:transparent;border:1px solid var(--line);border-radius:6px;cursor:zoom-in;flex:none}
+.zoom:hover{border-color:var(--accent);color:var(--accent)}
+.meaning{display:flex;justify-content:space-between;gap:10px;margin-top:4px;font-size:11.5px;color:var(--ink)}
+.meaning span{display:flex;align-items:center;gap:5px;max-width:48%}
+.meaning span:last-child{text-align:right;justify-content:flex-end}
+.meaning i{display:inline-block;width:12px;height:12px;border-radius:3px;flex:none;border:1px solid rgba(255,255,255,.25)}
+#zoom{position:fixed;inset:0;background:rgba(9,13,16,.97);z-index:50;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px}
+#zoom[hidden]{display:none}
+#zoom .bar{display:flex;gap:8px;align-items:center;width:min(1100px,96vw);margin-bottom:8px}
+#zoom .bar button{width:auto;padding:6px 12px}
+#zoom .bar span{flex:1;color:var(--mute);font-size:13px}
+#zoombody{width:min(1100px,96vw,calc((100vh - 170px) * 36 / 32))}
+#zoombody .map{max-width:none}
+#zoombody .cap{font-size:16px}
+#zoombody .meaning{font-size:14px}
+#zoombody .ticks{font-size:12.5px}
 .cbar{height:10px;border-radius:3px;margin-top:6px}
 .ticks{position:relative;height:16px;font-size:10.5px;color:var(--mute)}
 .ticks span{position:absolute;transform:translateX(-50%);top:2px}
@@ -129,6 +145,11 @@ details{margin-top:4px}summary{cursor:pointer;color:var(--ink);font-size:13px;fo
   <p id="explain"></p>
 </section>
 </main>
+<div id="zoom" hidden>
+  <div class="bar"><button id="zprev" class="ghost">◀ Day</button><button id="znext" class="ghost">Day ▶</button>
+    <span id="zoomday"></span><button id="zmap" class="ghost">Next map</button><button id="zfull" class="ghost">⛶ Full screen</button><button id="zclose">✕ Close</button></div>
+  <div id="zoombody"></div>
+</div>
 <script src="app.js"></script>
 </body>
 </html>

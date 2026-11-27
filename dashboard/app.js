@@ -9,6 +9,17 @@ const CH = [
   { name: "Column water vapour", unit: "kg/m²", conv: v => v, cmap: "rain" },
 ];
 const BOXES = { warm_ocean: [8, 20, 82, 94], monsoon_stall: [8, 20, 65, 75] };
+const MEAN = {   // plain-language meaning of each colour-bar end: [low end, high end]
+  t2m: ["cold", "hot"], tp: ["dry: little or no rain", "very wet: heavy rain"],
+  u10: ["wind blowing towards the west", "wind blowing towards the east"], v10: ["wind blowing towards the south", "wind blowing towards the north"],
+  msl: ["low pressure: cloudy, unsettled, storms more likely", "high pressure: settled, clear skies"], tcwv: ["dry air", "very moist air: fuel for heavy rain"],
+};
+const DMEAN = {  // same, for "shocked minus real-world" difference maps
+  t2m: ["cooler because of the shock", "warmer because of the shock"], tp: ["less rain because of the shock", "more rain because of the shock"],
+  u10: ["wind pushed more westward by the shock", "wind pushed more eastward by the shock"], v10: ["wind pushed more southward by the shock", "wind pushed more northward by the shock"],
+  msl: ["lower pressure because of the shock", "higher pressure because of the shock"], tcwv: ["drier air because of the shock", "moister air because of the shock"],
+};
+const KEYS = ["t2m", "tp", "u10", "v10", "msl", "tcwv"];
 const TABS = ["Weather", "Heat", "Flood", "Crop", "Energy", "Ensemble", "Inverse"];
 const TABLABEL = { Weather: "🌦 Weather", Heat: "🔥 Heat stress", Flood: "🌊 Flood risk", Crop: "🌾 Crops", Energy: "⚡ Wind & solar", Ensemble: "🎲 Uncertainty", Inverse: "🎯 Trigger" };
 const TABDESC = {
@@ -153,10 +164,15 @@ function coastline(g) {  // marching squares on the land fraction at cell centre
   }
   g.stroke();
 }
-function drawMap(title, data, cm, lo, hi, unit, box, wind) {
+let MAPS = [], zoomAt = null;   // arguments of the maps on screen; index of the enlarged one
+function drawMap(title, data, cm, lo, hi, unit, box, wind, mean, target, k) {
+  if (!target) MAPS.push([title, data, cm, lo, hi, unit, box, wind, mean]);
+  const idx = MAPS.length - 1;
+  k = k || Math.min(2, window.devicePixelRatio || 1);
   const wrap = document.createElement("div"); wrap.className = "map";
-  const cv = document.createElement("canvas"); cv.width = W * CELL; cv.height = H * CELL;
-  const g = cv.getContext("2d"), img = g.createImageData(W, H);
+  const cv = document.createElement("canvas"); cv.width = W * CELL * k; cv.height = H * CELL * k;
+  const g = cv.getContext("2d"), img = g.createImageData(W, H); g.scale(k, k);
+  const light = cm === "div";   // diverging maps are white around zero: draw arrows and labels dark there
   for (let i = 0; i < H; i++) for (let j = 0; j < W; j++) {
     const v = data[i * W + j], o = ((H - 1 - i) * W + j) * 4, c = isFinite(v) ? color(cm, (v - lo) / (hi - lo)) : [40, 46, 52];
     img.data.set([...c, 255], o); }
@@ -171,7 +187,8 @@ function drawMap(title, data, cm, lo, hi, unit, box, wind) {
     let ref = 0; for (let q = 0; q < N; q++) ref = Math.max(ref, Math.hypot(wind.u[q], wind.v[q]));
     ref = Math.max(ref, wind.min || 0.5);
     for (let pass = 0; pass < 2; pass++) {
-      g.strokeStyle = pass ? "rgba(255,255,255,.92)" : "rgba(0,0,0,.55)"; g.fillStyle = g.strokeStyle; g.lineWidth = pass ? 1.3 : 3;
+      g.strokeStyle = light ? (pass ? "rgba(20,30,40,.9)" : "rgba(255,255,255,.7)") : (pass ? "rgba(255,255,255,.92)" : "rgba(0,0,0,.55)");   // dark arrows on white maps
+      g.fillStyle = g.strokeStyle; g.lineWidth = pass ? 1.3 : 3;
       for (let i = 1; i < H; i += 3) for (let jx = 1; jx < W; jx += 3) {
         const q = i * W + jx, u = wind.u[q], v = wind.v[q], sp = Math.hypot(u, v); if (sp < Math.max(0.2, ref * 0.02)) continue;
         // sqrt scaling: weak land winds (~1-2 m/s daily mean) stay visible next to 10 m/s sea winds
@@ -181,13 +198,13 @@ function drawMap(title, data, cm, lo, hi, unit, box, wind) {
         g.beginPath(); g.moveTo(hx, hy); g.lineTo(hx - hs * Math.cos(a - 0.45), hy - hs * Math.sin(a - 0.45)); g.lineTo(hx - hs * Math.cos(a + 0.45), hy - hs * Math.sin(a + 0.45)); g.closePath(); g.fill();
       }
     }
-    g.fillStyle = "rgba(255,255,255,.75)"; g.font = "10px system-ui, sans-serif"; g.fillText(`longest arrow = ${ref.toFixed(1)} m/s · length ∝ √speed`, W * CELL - 205, 12);
+    g.fillStyle = light ? "rgba(20,30,40,.8)" : "rgba(255,255,255,.75)"; g.font = "10px system-ui, sans-serif"; g.fillText(`longest arrow = ${ref.toFixed(1)} m/s · length ∝ √speed`, W * CELL - 205, 12);
   }
   g.font = "600 10px system-ui, sans-serif"; g.textBaseline = "middle";
   CITIES.forEach(([n, la, lo2, side]) => { const x = px(lo2), y = py(la), tx = side > 0 ? x + 5 : x - 5 - g.measureText(n).width;
     g.fillStyle = "#fff"; g.strokeStyle = "rgba(0,0,0,.7)"; g.lineWidth = 2.5; g.beginPath(); g.arc(x, y, 2.6, 0, 7); g.stroke(); g.fill();
     g.strokeText(n, tx, y); g.fillText(n, tx, y); });
-  g.fillStyle = "rgba(255,255,255,.55)"; g.font = "9px system-ui, sans-serif";
+  g.fillStyle = light ? "rgba(20,30,40,.6)" : "rgba(255,255,255,.55)"; g.font = "9px system-ui, sans-serif";
   for (let lon = 70; lon <= 95; lon += 10) g.fillText(lon + "°E", px(lon) + 2, H * CELL - 7);
   for (let lat = 10; lat <= 30; lat += 10) g.fillText(lat + "°N", 3, py(lat) - 6);
   if (box) { g.strokeStyle = "#fff"; g.setLineDash([5, 4]); g.lineWidth = 1.8; g.strokeRect(px(box[2]), py(box[1]), px(box[3]) - px(box[2]), py(box[0]) - py(box[1])); g.setLineDash([]); }
@@ -201,10 +218,13 @@ function drawMap(title, data, cm, lo, hi, unit, box, wind) {
     if (i >= 0 && i < H && jj >= 0 && jj < W) cv.title = `${la.toFixed(1)}°N ${lo2.toFixed(1)}°E: ${(+data[i * W + jj]).toFixed(2)} ${unit}`; };
   const span = Math.abs(hi - lo), dec = span >= 20 ? 0 : span >= 2 ? 1 : span >= 0.2 ? 2 : 3;   // enough decimals for 5 distinct ticks
   const f = v => v.toFixed(dec).replace(/^-(0\.?0*)$/, "$1");
-  wrap.innerHTML = `<div class="cap">${title}</div>`; wrap.appendChild(cv);
+  wrap.innerHTML = `<div class="cap"><span>${title}</span>${target ? "" : `<button class="zoom" title="Enlarge this map">⤢</button>`}</div>`; wrap.appendChild(cv);
+  if (!target) wrap.querySelector(".zoom").onclick = () => openZoom(idx);
   const ticks = [0, 0.25, 0.5, 0.75, 1].map(t => `<span style="left:${t * 100}%">${f(lo + t * (hi - lo))}</span>`).join("");
   wrap.insertAdjacentHTML("beforeend", `<div class="cbar" style="background:${grad(cm)}"></div><div class="ticks">${ticks}</div><div class="unit">${unit}</div>`);
-  $("maps").appendChild(wrap);
+  if (mean) { const sw = t => `<i style="background:rgb(${color(cm, t)})"></i>`;
+    wrap.insertAdjacentHTML("beforeend", `<div class="meaning"><span>${sw(0)}◀ ${mean[0]}</span><span>${mean[1]} ▶${sw(1)}</span></div>`); }
+  (target || $("maps")).appendChild(wrap);
 }
 const range = (...arrs) => { let lo = Infinity, hi = -Infinity; arrs.forEach(a => a && a.forEach(v => { if (isFinite(v)) { lo = Math.min(lo, v); hi = Math.max(hi, v); } })); return [lo, hi === lo ? lo + 1 : hi]; };
 const sym = (...arrs) => { const [lo, hi] = range(...arrs); const m = Math.max(Math.abs(lo), Math.abs(hi), 1e-3); return [-m, m]; };
@@ -212,17 +232,21 @@ function kpis(list) { $("kpis").innerHTML = list.map(([v, l]) => `<div class="kp
 function curBox() { const p = $("preset").value; return p === "custom" ? ["la0", "la1", "lo0", "lo1"].map(id => +$(id).value) : BOXES[p]; }
 
 // pairs of maps: baseline, shocked, shocked-minus-baseline
-function triple(fn, cm, unit, title, dcm = "div", wfn = null) {
+function triple(fn, cm, unit, title, dcm = "div", wfn = null, mean = null, dmean = null) {
   const a = fn(base.R), b = shock && fn(shock.R), [lo, hi] = range(a, b);
   const wa = wfn && wfn(base.R), wb = wfn && shock && wfn(shock.R);
-  drawMap(shock ? `① Real-world forecast — ${title}` : title, a, cm, lo, hi, unit, null, wa);
-  if (b) { drawMap(`② What-if universe — ${title}`, b, cm, lo, hi, unit, curBox(), wb); const d = diff(a, b), [dl, dh] = sym(d);
-    drawMap(`③ Difference (② − ①): red = more, blue = less`, d, dcm, dl, dh, unit, curBox(), wb && { u: diff(wa.u, wb.u), v: diff(wa.v, wb.v), min: 0.05 }); }
+  drawMap(shock ? `① Real-world forecast — ${title}` : title, a, cm, lo, hi, unit, null, wa, mean);
+  if (b) { drawMap(`② What-if universe — ${title}`, b, cm, lo, hi, unit, curBox(), wb, mean); const d = diff(a, b), [dl, dh] = sym(d);
+    drawMap(`③ Difference (② − ①): red = more, blue = less`, d, dcm, dl, dh, unit, curBox(), wb && { u: diff(wa.u, wb.u), v: diff(wa.v, wb.v), min: 0.05 },
+      dmean || (mean && [`lower than the real-world forecast (${mean[0].split(":")[0]})`, `higher than the real-world forecast (${mean[1].split(":")[0]})`])); }
   return [a, b];
 }
 
 function render() {
-  $("maps").innerHTML = ""; $("kpis").innerHTML = ""; $("tabdesc").textContent = TABDESC[tab];
+  $("maps").innerHTML = ""; $("kpis").innerHTML = ""; $("tabdesc").textContent = TABDESC[tab]; MAPS = [];
+  try { renderTab(); } finally { if (zoomAt !== null) openZoom(Math.min(zoomAt, MAPS.length - 1)); }
+}
+function renderTab() {
   if (!base && tab !== "Inverse") { $("maps").innerHTML = `<div class="empty">Choose a starting day (①) and optionally a what-if shock (②), then press <b>▶ Run simulation</b> (③).</div>`; $("explain").textContent = ""; return; }
   if (!base) { $("maps").innerHTML = inv ? "" : `<div class="empty">Open "Reverse what-if: find the trigger" on the left, set a box and a target, and press <b>Find the trigger</b>.</div>`; }
   const steps = base ? base.steps : 10, k = Math.min(+$("day").value, steps) - 1, c = +$("chan").value, ch = CH[c];
@@ -230,7 +254,7 @@ function render() {
   $("chan").disabled = !(tab === "Weather" || tab === "Ensemble"); $("arrows").disabled = tab !== "Weather";
   $("dayl").textContent = tab === "Weather" || tab === "Ensemble" ? k + 1 : tab === "Inverse" ? "(not used here)" : `1–${k + 1} (totals so far)`;
   if (tab === "Weather") {
-    triple(R => at(R, k, c).map(ch.conv), ch.cmap, ch.unit, `${ch.name}, day ${k + 1}`, "div", R => ({ u: at(R, k, 2), v: at(R, k, 3) }));
+    triple(R => at(R, k, c).map(ch.conv), ch.cmap, ch.unit, `${ch.name}, day ${k + 1}`, "div", R => ({ u: at(R, k, 2), v: at(R, k, 3) }), MEAN[KEYS[c]], DMEAN[KEYS[c]]);
     const a = at(base.R, k, c).map(ch.conv);
     const sgn = v => (v >= 0 ? "+" : "") + v.toFixed(2);
     if (shock) { const d = diff(a, at(shock.R, k, c).map(ch.conv)), bx = curBox(), inb = Float32Array.from({ length: N }, (_, q) => inBox(bx, Math.floor(q / W), q % W) ? 1 : 0);
@@ -242,7 +266,8 @@ function render() {
     else kpis([[mean(a, L).toFixed(1) + " " + ch.unit, "land average"], [Math.max(...a).toFixed(1) + " " + ch.unit, "highest anywhere"], [Math.min(...a).toFixed(1) + " " + ch.unit, "lowest anywhere"]]);
     $("explain").textContent = shock ? ($("sustain").checked ? "The shock is held on every day inside its box (like a sea that stays warm); both universes step day by day from the same start, so the difference map is the shock's effect alone." : "One-day shock (as in the official test): the atmosphere relaxes back over a few days because the sea surface itself is unchanged.") : "Day-by-day forecast from the last 3 real days.";
   } else if (tab === "Heat") {
-    const [a, b] = triple(R => heat(R, kk).map, "heat", "°C feels-like", `Highest feels-like temperature, days 1–${kk}`);
+    const [a, b] = triple(R => heat(R, kk).map, "heat", "°C feels-like", `Highest feels-like temperature, days 1–${kk}`, "div", null,
+      ["comfortable or cool", "dangerous heat: feels like 41 °C or more"], ["feels cooler because of the shock", "feels hotter because of the shock"]);
     const band = (x, lo, hi) => count(x, v => v >= lo && v < hi), land_n = count(L, v => v > 0.5);
     kpis([[band(a, 41, 99), "land cells in DANGER (≥ 41 °C feels-like)"], [band(a, 32, 41), "land cells in EXTREME CAUTION (32–41 °C)"],
       ...(b ? [[(band(b, 41, 99) - band(a, 41, 99) >= 0 ? "+" : "") + (band(b, 41, 99) - band(a, 41, 99)), "change in danger cells from the shock"]] : []),
@@ -250,39 +275,43 @@ function render() {
     $("explain").textContent = `Feels-like temperature = US National Weather Service heat index, from the model's daily-mean temperature and humidity (surface humidity = column water vapour ÷ a ~2.5 km water-vapour scale height, then dew point via the Magnus formula). Grey = sea. Bands: 32–41 °C extreme caution, ≥ 41 °C danger. Daily means are cooler than afternoon peaks, so real afternoon values run higher. ${land_n} land cells.`;
   } else if (tab === "Flood") {
     const idx = m => m.map((v, q) => v / S.p99[q]);   // 1.0 = this cell's own 1-in-100-day 3-day rain (2005–2021)
-    const [a, b] = triple(R => idx(flood(R, kk)), "risk", "× local 1-in-100-day total", `Flood risk index (3-day rain ÷ local extreme), days 1–${kk}`);
+    const [a, b] = triple(R => idx(flood(R, kk)), "risk", "× local 1-in-100-day total", `Flood risk index (3-day rain ÷ local extreme), days 1–${kk}`, "div", null,
+      ["normal rain for this place", "rain at or beyond this place's 1-in-100-day extreme: flood risk"], ["lower flood risk because of the shock", "higher flood risk because of the shock"]);
     const hi = x => count(x, v => v >= 1), ele = x => x.reduce((n, v, q) => n + (v < 1 && v >= S.p95[q] / S.p99[q] ? 1 : 0), 0);
     kpis([[hi(a), "land cells at/above their 1-in-100-day 3-day rain (HIGH)"], [ele(a), "land cells above their 1-in-20-day total (ELEVATED)"],
       ...(b ? [[(hi(b) - hi(a) >= 0 ? "+" : "") + (hi(b) - hi(a)), "change in HIGH cells from the shock"]] : []),
       [Math.max(...flood(base.R, kk).filter(isFinite)).toFixed(0) + " mm", "largest 3-day total on land"]]);
     $("explain").textContent = "Flood risk index = largest 3-day rain so far ÷ that cell's own 99th-percentile 3-day rain in 2005–2021 (its 1-in-100-day total). 1.0 or more = rare for that place (HIGH); above its 95th percentile (1-in-20-day) = ELEVATED. Local thresholds matter: 100 mm is routine for Mumbai but extreme for Jaipur. Sea is grey.";
   } else if (tab === "Crop") {
-    const [a, b] = triple(R => crop(R, kk), "risk", "stress 0–1", `Crop water stress, days 1–${kk}`);
+    const [a, b] = triple(R => crop(R, kk), "risk", "stress 0–1", `Crop water stress, days 1–${kk}`, "div", null,
+      ["crops have enough water", "severe crop water stress: rain shortfall and heat"], ["less crop stress because of the shock", "more crop stress because of the shock"]);
     kpis([[(mean(a) * 100).toFixed(0) + "%", "mean land stress (Prime)"], [(count(a, v => v > 0.5) / count(L, v => v > 0.5) * 100).toFixed(0) + "%", "land area under high stress"],
       ...(b ? [[((mean(b) - mean(a)) * 100).toFixed(1) + " pts", "stress change from shock"]] : [])]);
     $("explain").textContent = "Stress = 0.7 × rain deficit versus the 2005–2021 normal for each forecast day (interpolated between monthly normals) + 0.3 × share of hot days (daily-mean temperature ≥ 32 °C, roughly afternoon ≥ 38 °C). Dry-season months with little normal rain show no deficit (crops then rely on irrigation). Try the weaker-monsoon shock in June–September.";
   } else if (tab === "Energy") {
-    const [ws] = triple(R => energy(R, kk).speed, "seq", "m/s", `Wind speed at 100 m (hub height), mean of days 1–${kk}`);
+    const [ws] = triple(R => energy(R, kk).speed, "seq", "m/s", `Wind speed at 100 m (hub height), mean of days 1–${kk}`, "div", null,
+      ["calm: little wind-power potential", "strong wind: high wind-power potential"], ["weaker wind because of the shock", "stronger wind because of the shock"]);
     const wa = energy(base.R, kk).wind, wb = shock && energy(shock.R, kk).wind;
-    const [sa, sb] = triple(R => energy(R, kk).sun, "heat", "W/m²", `Solar resource (clearness-weighted), days 1–${kk}`);
+    const [sa, sb] = triple(R => energy(R, kk).sun, "heat", "W/m²", `Solar resource (clearness-weighted), days 1–${kk}`, "div", null,
+      ["cloudy or rainy: little solar power", "clear and sunny: high solar potential"], ["less sunshine because of the shock", "more sunshine because of the shock"]);
     kpis([[mean(wa, L).toFixed(0) + " W/m²", "wind power density on land (offshore: " + mean(wa.map((v, q) => L[q] > 0.5 ? NaN : v)).toFixed(0) + ")"], [mean(sa, L).toFixed(0) + " W/m²", "mean solar on land"],
       ...(wb ? [[((mean(wb) / mean(wa) - 1) * 100).toFixed(1) + "%", "wind change from shock"], [((mean(sb, L) / mean(sa, L) - 1) * 100).toFixed(1) + "%", "solar change from shock"]] : [])]);
     $("explain").textContent = "Indicative only. Wind speed at 100 m = 10 m wind × (10)^α with α = 0.2 over land and 0.11 offshore (standard shear exponents); power density ½ρv³ × 1.91, the standard Weibull factor that restores the gusts a daily-mean wind hides. Solar: exact top-of-atmosphere daily sunlight × a simple clearness factor that drops with moisture and rain.";
   } else if (tab === "Inverse") {
     if (!inv) { $("explain").textContent = ""; return; }
     const dT = flat(inv.delta[0]), dq = flat(inv.delta[5]), sens = flat(inv.sensitivity), b = inv.box;
-    drawMap("Discovered trigger: temperature change today", dT, "div", ...sym(dT), "K", b);
-    drawMap("Discovered trigger: moisture change today", dq, "div", ...sym(dq), "kg/m²", b);
-    drawMap("Sensitivity map (where today matters most)", sens, "seq", 0, 1, "relative", b);
+    drawMap("Discovered trigger: temperature change today", dT, "div", ...sym(dT), "K", b, null, ["cool this area today", "warm this area today"]);
+    drawMap("Discovered trigger: moisture change today", dq, "div", ...sym(dq), "kg/m²", b, null, ["dry this area today", "moisten this area today"]);
+    drawMap("Sensitivity map (where today matters most)", sens, "seq", 0, 1, "relative", b, null, ["changes here barely matter", "changes here matter most for the target"]);
     const r = inv.rain_by_iter;
     kpis([[r[0].toFixed(1) + " mm", "box rain before"], [r[r.length - 1].toFixed(1) + " mm", "box rain after search"], [inv.target + " mm", "target"], [Math.max(...dT.map(Math.abs)).toFixed(2) + " K", "largest temperature change"]]);
     $("explain").textContent = `Gradient descent through the frozen model found the smallest smooth change to today's weather that pushes day-${inv.day} rain in the box toward ${inv.target} mm.`;
   } else if (tab === "Ensemble") {
     if (!ens) { $("explain").textContent = "Uncertainty is being computed in the background; this tab fills in automatically."; return; }
     const mu = at(ens.mean, k, c).map(ch.conv), sd = at(ens.std, k, c).map(v => ch.conv(v) - ch.conv(0)), pr = ens.p.subarray(k * N, (k + 1) * N);
-    drawMap(`${ch.name}, day ${k + 1} — forecast`, mu, ch.cmap, ...range(mu), ch.unit);
-    drawMap(`Uncertainty (± 1 std), day ${k + 1}`, sd, "seq", ...range(sd), ch.unit);
-    drawMap(`Chance of heavy rain (> 10 mm/day), day ${k + 1}`, pr, "rain", 0, 1, "probability");
+    drawMap(`${ch.name}, day ${k + 1} — forecast`, mu, ch.cmap, ...range(mu), ch.unit, null, null, MEAN[KEYS[c]]);
+    drawMap(`Uncertainty (± 1 std), day ${k + 1}`, sd, "seq", ...range(sd), ch.unit, null, null, ["forecast is confident here", "forecast is uncertain here"]);
+    drawMap(`Chance of heavy rain (> 10 mm/day), day ${k + 1}`, pr, "rain", 0, 1, "probability", null, null, ["heavy rain unlikely", "heavy rain very likely"]);
     kpis([[ens.members, "ensemble members"], [mean(sd).toFixed(2) + " " + ch.unit, "average uncertainty (± 1 std)"], [count(pr, v => v >= 0.5), "cells with ≥ 50 % heavy-rain chance"]]);
     $("explain").textContent = `Uncertainty comes from the model's own trained ensemble (${ens.members} members: 3 independently trained models × noise members), with its spread calibrated per day and variable on 2019 so that ± 1 std matches the real forecast error (checked on unseen 2020–21: spread/error 0.89–1.05). Includes the current shock.`;
   }
@@ -340,6 +369,15 @@ function play() {
   timer = setInterval(() => { const d = $("day"); d.value = +d.value >= +d.max ? 1 : +d.value + 1; render(); }, 700);
 }
 
+function openZoom(i) {   // one map, large and crisp; stays live with the day slider / Play
+  if (i < 0 || !MAPS[i]) return closeZoom();
+  zoomAt = i; const z = $("zoom"), body = $("zoombody"); z.hidden = false; body.innerHTML = "";
+  const a = MAPS[i]; drawMap(a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7], a[8], body, 3);
+  $("zoomday").textContent = `Day ${$("day").value} of ${$("day").max}` + (MAPS.length > 1 ? ` · map ${i + 1} of ${MAPS.length}` : "");
+}
+function closeZoom() { zoomAt = null; $("zoom").hidden = true; if (document.fullscreenElement) document.exitFullscreen(); }
+function stepDay(d) { const s = $("day"); s.value = Math.min(+s.max, Math.max(1, +s.value + d)); render(); }
+
 function status(t) {
   const el = $("status"); el.textContent = t;
   el.className = "pill" + (/^(live|ready)/.test(t) ? " ok" : /error|failed|not reachable/.test(t) ? " err" : "");
@@ -364,6 +402,12 @@ async function init() {
     b.onclick = () => { tab = t; [...$("tabs").children].forEach(x => x.className = x === b ? "on" : ""); render(); }; $("tabs").appendChild(b); });
   ["day", "chan", "cells", "arrows"].forEach(id => $(id).oninput = render);
   $("run").onclick = run; $("inv").onclick = inverse; $("play").onclick = play;
+  $("zclose").onclick = closeZoom; $("zprev").onclick = () => stepDay(-1); $("znext").onclick = () => stepDay(1);
+  $("zmap").onclick = () => openZoom((zoomAt + 1) % MAPS.length);
+  $("zfull").onclick = () => document.fullscreenElement ? document.exitFullscreen() : $("zoom").requestFullscreen();
+  $("zoom").onclick = e => { if (e.target.id === "zoom") closeZoom(); };
+  document.addEventListener("keydown", e => { if (zoomAt === null) return;
+    if (e.key === "Escape") closeZoom(); else if (e.key === "ArrowLeft") stepDay(-1); else if (e.key === "ArrowRight") stepDay(1); });
   render();   // show the guided empty state immediately, before the server answers
   try { const r = await fetch($("server").value + "/health", { method: "POST" }); const j = await r.json(); status(`${j.status} · ${j.model_name}`); }
   catch { status("server not reachable — start it with: python serve.py --port 8000"); }
