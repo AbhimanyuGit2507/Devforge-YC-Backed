@@ -31,18 +31,29 @@ Z_ALL, COST = None, None
 if isinstance(MODEL, Ensemble):   # speed guard: measure this machine once, then size the ensemble per request
     import time
     Z_ALL = MODEL.z
+
+    def _median_time(threads):   # 1-member 4-day rollout; median of 3 because a contended CPU makes timings jumpy
+        torch.set_num_threads(threads); MODEL.z = Z_ALL[:1]; MODEL.rollout(_WARM, [0.0, 1.0], 4); ts = []
+        for _ in range(3):
+            t1 = time.perf_counter(); MODEL.rollout(_WARM, [0.0, 1.0], 4); ts.append(time.perf_counter() - t1)
+        return sorted(ts)[1]
+    # if other work shares the 4 cores, 4 threads thrash (measured 1-16 s per call); fewer threads stay fast and stable
+    _MAXT = max(1, min(4, _CORES)); _cand = [t for t in (4, 3, 2) if t <= _MAXT]
+    _t4 = _median_time(_MAXT)   # an idle 4-core machine takes ~0.1 s here: keep 4 threads without testing others
+    THREADS = _MAXT if _t4 < 0.25 or len(_cand) < 2 else min([(_MAXT, _t4)] + [(t, _median_time(t)) for t in _cand[1:]], key=lambda x: x[1])[0]
+    torch.set_num_threads(THREADS); MODEL.z = Z_ALL
     MODEL.rollout(_WARM, [0.0, 1.0], 10)                       # first full call pays one-off costs; time the next ones
     _dt = float("inf")
     for _ in range(3):                                          # fastest of 3: a busy moment at startup must not shrink every call
         _t = time.perf_counter(); MODEL.rollout(_WARM, [0.0, 1.0], 10); _dt = min(_dt, time.perf_counter() - _t)
     COST = _dt / (10 * len(Z_ALL))                              # seconds per member per simulated day (all runs)
-    print(f"{torch.get_num_threads()} threads, warm 10-step rollout {_dt:.2f} s with {len(Z_ALL)} members -> "
+    print(f"{THREADS} threads; warm 10-step rollout {_dt:.2f} s with {len(Z_ALL)} members -> "
           f"{min(len(Z_ALL), max(1, int(BUDGET_S / (COST * 10))))} members for 10-day calls", flush=True)
 
 
 def members_for(steps: int) -> int:
     """Same steps -> same member count, so identical requests (and the zero shock) give identical outputs."""
-    return min(len(Z_ALL), max(1, int(BUDGET_S / (COST * max(steps, 1)))))
+    return min(len(Z_ALL), max(1, int(BUDGET_S / (COST * max(steps, 1)))))   # floor 1 = noise-free control member
 
 
 def _arr(x):

@@ -31,7 +31,7 @@ Tested with Python 3.13 and torch 2.15 (CPU); any torch >= 2.0 should work. Star
 before `/health` answers.
 The server loads `weights_v2/` at import (≈2 s), listens on 0.0.0.0 and answers a 10-step `/simulate` in ≈1.3 s on 4 CPU cores.
 **Speed guard:** at startup the server times a few 10-day rollouts on this machine (fastest of 3) and then uses as many of
-the 8 noise members (× 3 seeds) as fit a 2.5 s model budget per request, with threads = min(4, available cores). On 4 cores
+the 8 noise members (× 3 seeds) as fit a 2.5 s model budget per request; it also picks 4/3/2 threads (never more than the cores it may use) if the CPU is busy. On 4 cores
 all members run (≈1.3–2.8 s per call, depending on the CPU); slower machines use fewer members, which keeps every call under
 the 5 s limit at a small cost in skill (measured: 10-day calls under 2 s on 1 core, 2.5 s on 2 cores). The member count depends only on
 `steps`, so identical requests and the zero shock still give identical outputs.
@@ -92,11 +92,21 @@ Evaluation uses the kit's `monsoon_r1` scoring code (MIT), installed separately 
   matched `baseline`; a zero shock still returns identical runs.
 - `POST /inverse` — inverse shock discovery (smallest smooth trigger for a target rain amount).
 
+## Stage-1 dress rehearsal (`tests/grader_sim.py`)
+Fresh clone of `main`, `python serve.py --port 8000`, 8 hidden-style requests over HTTP (once each, 5 s timeout) on
+held-out 2020-21 analogues (Kerala onset, Mumbai heavy rain, NW heatwave, Cyclone Amphan, winter disturbance + warm Bay,
+weaker Arabian-Sea wind, zero shock), scored with the kit's own functions:
+ready in 8-9 s (30 s with the CPU deliberately overloaded), every request 2.0-2.6 s, peak memory 0.64 GB, zero shock
+identical, qualification gate PASS, predicted automated score **81.1 / 85** (forecast 43.0, no-blur 10, shocks 13.1,
+repo 15) + brief. The server picks its thread count (4/3/2) and ensemble size at start-up so a slow or busy sandbox still
+answers in ~2-3 s.
+
 ## Tests
 ```bash
 python -m monsoon_r1.schema_validator http://localhost:8000   # kit validator: both wire formats, shocks, 5 s limit
 python -c "from monsoon_r1.repo_scan import scan; print(scan('.'))"   # kit repo check (15/15, no flags)
 python tests/scenarios.py     # 20 scenario checks: physical ranges, shock signs/locality, zero shock, uncertainty, inverse
+python tests/grader_sim.py --repo .   # Stage-1 rehearsal over HTTP (see above)
 python tests/check_maps.py    # 43 checks: every dashboard map formula (run from dashboard/app.js in Node) vs an independent
                               # NumPy implementation, plus NWS heat-index table and top-of-atmosphere sunlight reference values
 ```
