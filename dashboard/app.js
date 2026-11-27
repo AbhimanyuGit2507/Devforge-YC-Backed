@@ -254,7 +254,7 @@ function render() {
 function renderTab() {
   if (!base && tab !== "Inverse") { $("maps").innerHTML = `<div class="empty">Choose a starting day (①) and optionally a what-if shock (②), then press <b>▶ Run simulation</b> (③).</div>`; $("explain").textContent = ""; return; }
   if (!base) { $("maps").innerHTML = inv ? "" : `<div class="empty">Open "Reverse what-if: find the trigger" on the left, set a box and a target, and press <b>Find the trigger</b>.</div>`; }
-  const steps = base ? base.steps : 10, k = Math.min(+$("day").value, steps) - 1, c = +$("chan").value, ch = CH[c];
+  const steps = base ? base.steps : 14, k = Math.min(+$("day").value, steps) - 1, c = +$("chan").value, ch = CH[c];
   const L = land(), kk = k + 1;   // impact tabs accumulate "through day kk", so the slider and Play animate them too
   $("chan").disabled = !(tab === "Weather" || tab === "Ensemble"); $("arrows").disabled = tab !== "Weather";
   $("dayl").textContent = tab === "Weather" || tab === "Ensemble" ? k + 1 : tab === "Inverse" ? "(not used here)" : `1–${k + 1} (totals so far)`;
@@ -320,6 +320,26 @@ function renderTab() {
     kpis([[ens.members, "ensemble members"], [mean(sd).toFixed(2) + " " + ch.unit, "average uncertainty (± 1 std)"], [count(pr, v => v >= 0.5), "cells with ≥ 50 % heavy-rain chance"]]);
     $("explain").textContent = `Uncertainty comes from the model's own trained ensemble (${ens.members} members: 3 independently trained models × noise members), with its spread calibrated per day and variable on 2019 so that ± 1 std matches the real forecast error (checked on unseen 2020–21: spread/error 0.89–1.05). Includes the current shock.`;
   }
+}
+
+// one-click scenario templates: start window + shock (custom = [channel, "add"|"pct", amount, lat0, lat1, lon0, lon1]) + tab to open
+const TEMPLATES = [
+  { label: "🌾 Weak monsoon → crop failure", hint: "Arabian Sea monsoon stalls in July", sample: "Peak monsoon, active spell", preset: "monsoon_stall", tab: "Crop" },
+  { label: "🌊 Bihar floods", hint: "+20 % moisture over Bihar & Nepal foothills", sample: "Peak monsoon, active spell", custom: [5, "pct", 20, 24, 29, 83, 89], tab: "Flood" },
+  { label: "🌡 Warm Bay → east India rain", hint: "+3 °C, +15 % moisture over the Bay", sample: "Peak monsoon, active spell", preset: "warm_ocean", tab: "Flood" },
+  { label: "🌀 Stronger Cyclone Amphan", hint: "Bay of Bengal 2 °C warmer, May 2020", sample: "Cyclone Amphan (Bay of Bengal, May 2020)", custom: [0, "add", 2, 12, 22, 84, 92], tab: "Flood" },
+  { label: "🏙 Mumbai deluge", hint: "+20 % moisture off Konkan, Aug 2020", sample: "Mumbai extreme rain (Aug 2020)", custom: [5, "pct", 20, 17, 21, 70, 75], tab: "Flood" },
+  { label: "🔥 North India heatwave", hint: "+2 °C over the plains, pre-monsoon", sample: "Pre-monsoon heatwave", custom: [0, "add", 2, 22, 30, 74, 86], tab: "Heat" },
+  { label: "🌱 Delayed monsoon onset", hint: "Onset stalls over Kerala in June", sample: "Monsoon onset (Kerala)", preset: "monsoon_stall", tab: "Crop" },
+];
+function setTab(t) { tab = t; [...$("tabs").children].forEach(x => x.className = x.dataset.t === t ? "on" : ""); }
+async function applyTemplate(t) {
+  $("sample").value = S.samples.findIndex(s => s.name === t.sample); $("sample").onchange();
+  $("steps").value = 14; $("sustain").checked = true; $("day").value = 14;   // impact tabs then show totals over all 14 days
+  if (t.custom) { const [c, m, v, a0, a1, o0, o1] = t.custom; setPreset("custom");
+    $("cch").value = c; $("cmode").value = m; $("cval").value = v; [a0, a1, o0, o1].forEach((x, i) => $(["la0", "la1", "lo0", "lo1"][i]).value = x); }
+  else setPreset(t.preset);
+  setTab(t.tab); await run();
 }
 
 let runId = 0;
@@ -402,6 +422,8 @@ async function init() {
   const sd = () => { $("sdesc").textContent = SAMPLEDESC[S.samples[+$("sample").value].name] || ""; };
   $("sample").onchange = () => { sd(); guide(1); }; sd();
   [...$("presets").children].forEach(b => b.onclick = () => setPreset(b.dataset.p));
+  TEMPLATES.filter(t => S.samples.some(s => s.name === t.sample)).forEach(t => { const b = document.createElement("button");
+    b.innerHTML = `${t.label}<small>${t.hint}</small>`; b.onclick = () => applyTemplate(t); $("templates").appendChild(b); });
   CH.forEach((c, i) => $("chan").insertAdjacentHTML("beforeend", `<option value="${i}">${c.name}</option>`));
   TABS.forEach(t => { const b = document.createElement("button"); b.textContent = TABLABEL[t]; b.dataset.t = t; b.className = t === tab ? "on" : "";
     b.onclick = () => { tab = t; [...$("tabs").children].forEach(x => x.className = x === b ? "on" : ""); render(); }; $("tabs").appendChild(b); });

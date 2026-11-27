@@ -73,6 +73,11 @@ details{margin-top:4px}summary{cursor:pointer;color:var(--ink);font-size:13px;fo
 .unit{font-size:11px;color:var(--mute);text-align:center}
 #explain{color:var(--mute);font-size:12.5px;margin-top:10px}
 #day{width:100%}
+.templates{display:flex;gap:8px;padding:10px 20px;border-bottom:1px solid var(--line);overflow-x:auto;align-items:stretch}
+.templates>b{flex:none;align-self:center;font-size:13px;color:var(--mute)}
+.templates button{width:auto;flex:none;text-align:left;padding:6px 10px;border-radius:8px;background:#0f161b}
+.templates button small{display:block;color:var(--mute);font-size:11px}
+.templates button:hover{border-color:var(--accent)}
 .empty{padding:40px;text-align:center;color:var(--mute);border:1px dashed var(--line);border-radius:10px}
 </style>
 </head>
@@ -82,13 +87,14 @@ details{margin-top:4px}summary{cursor:pointer;color:var(--ink);font-size:13px;fo
   <span class="pill" id="status">connecting…</span>
 </header>
 <div class="steps" id="guide"><span id="g1" class="on">① Choose a starting day</span><span id="g2">② Choose a what-if shock (optional)</span><span id="g3">③ Run</span><span id="g4">④ Explore the tabs · ▶ Play</span></div>
+<div class="templates" id="templates"><b>Scenario templates (14 days, one click):</b></div>
 <main>
 <aside>
   <div class="card">
     <h2><span class="num">1</span>Starting weather</h2>
     <select id="sample" aria-label="Starting weather"></select>
     <p class="hint" id="sdesc"></p>
-    <label for="steps">Days to simulate</label><input id="steps" type="number" min="1" max="14" value="10">
+    <label for="steps">Days to simulate</label><input id="steps" type="number" min="1" max="14" value="14">
   </div>
   <div class="card">
     <h2><span class="num">2</span>What-if shock</h2>
@@ -135,7 +141,7 @@ details{margin-top:4px}summary{cursor:pointer;color:var(--ink);font-size:13px;fo
   <div id="tabdesc"></div>
   <div class="controls">
     <div><label for="chan">Variable shown</label><select id="chan"></select></div>
-    <div style="flex:2"><label for="day">Day <span id="dayl">1</span></label><input id="day" type="range" min="1" max="10" value="1"></div>
+    <div style="flex:2"><label for="day">Day <span id="dayl">1</span></label><input id="day" type="range" min="1" max="14" value="1"></div>
     <div style="flex:0 0 100px"><button id="play" class="ghost">▶ Play</button></div>
     <div style="flex:0 0 auto"><label class="check"><input id="arrows" type="checkbox" checked> Wind arrows</label>
       <label class="check"><input id="cells" type="checkbox"> Show 1° grid cells</label></div>
