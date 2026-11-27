@@ -154,12 +154,12 @@ with PdfPages(ROOT / a.out) as pdf:
     y = head(f, 0.05, 0.365, "Impact modules (prime vs shocked)")
     para(f, 0.05, y, [
         "- Heat stress: NWS heat index (feels-like) from T and humidity (dew point",
-        "  from tcwv, Reitan 1963); bands 32-41 C caution, >= 41 C danger.",
-        "- Flood risk: max 3-day accumulated rain; cells > 50 / > 100 mm.",
-        "- Kharif crop stress: 0.7 x rain deficit vs monthly climatology",
-        "  + 0.3 x heat-day fraction (try the monsoon-stall shock).",
-        "- Energy: wind power density at 100 m (1/7 power law) and a",
-        "  clearness-weighted solar resource; % change from the shock.",
+        "  from tcwv, Reitan-type relation); 32-41 C caution, >= 41 C danger.",
+        "- Flood risk: max 3-day rain on land; cells > 50 / > 100 mm.",
+        "- Crop water stress: 0.7 x rain deficit vs monthly normal",
+        "  + 0.3 x hot days (daily mean >= 32 C); try the monsoon-stall shock.",
+        "- Energy (indicative): wind power density at 100 m (1/7 law, x1.91",
+        "  Weibull factor) and clearness-weighted solar; % change from shock.",
         "- Ensemble: 8 perturbed members -> spread, P(rain > 10 mm).",
         "- Inverse search: gradient descent on today's state (weights frozen),",
         "  capped at 5 K / 5 m/s / 10 kg m-2; first gradient = adjoint map.",

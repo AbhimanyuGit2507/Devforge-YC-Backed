@@ -15,8 +15,8 @@ const TABDESC = {
   Weather: "Day-by-day forecast. Left: real-world forecast (Timeline Prime). Middle: the what-if universe. Right: the difference — red = more, blue = less. Arrows show the 10 m wind.",
   Heat: "How hot it feels (heat index, temperature + humidity) — the highest value so far in each land cell. Red = dangerous heat. Use ▶ Play to watch it build.",
   Flood: "Flood risk: the largest 3-day rain total so far in each 110 km cell. More than 100 mm in 3 days = high risk.",
-  Crop: "Kharif crop water stress (0 = fine, 1 = severe): rain deficit vs the normal for this month plus heat. Try the weaker-monsoon shock.",
-  Energy: "Wind power (top row) and solar resource (bottom row) averaged over the days so far — what the shock means for renewables.",
+  Crop: "Crop water stress (0 = fine, 1 = severe): rain shortfall vs the normal for this month, plus very hot days. Most useful in the June–September (Kharif) season.",
+  Energy: "Indicative wind power (top row) and solar resource (bottom row), averaged over the days so far — what the shock means for renewables.",
   Ensemble: "8 slightly nudged copies of the same forecast. Where they disagree (spread), the forecast is uncertain. Right: chance of heavy rain.",
   Inverse: "Reverse what-if: the smallest change to today's weather that would produce your target rain, and where today's weather matters most.",
 };
@@ -93,19 +93,20 @@ function heat(R, steps) { // feels-like temperature from daily-mean T and humidi
   const es = c => 6.112 * Math.exp(17.62 * c / (243.12 + c));
   for (let k = 0; k < steps; k++) { const T = at(R, k, 0), Q = at(R, k, 5);
     for (let q = 0; q < N; q++) { if (land()[q] < 0.5) continue;
-      const tc = T[q] - 273.15, td = Math.min(tc, (Math.log(Math.max(Q[q], 1) / 10) - 0.1102) / 0.0614);   // dew point from column water vapour (Reitan 1963)
+      const tc = T[q] - 273.15, td = Math.min(tc, (Math.log(Math.max(Q[q], 1) / 10) - 0.1102) / 0.0614);   // dew point from column water vapour: Reitan-type ln(W) = a + b*Td fit with humid-tropics coefficients
       const h = heatIndexC(tc, Math.min(100, 100 * es(td) / es(tc)));
       peak[q] = isNaN(peak[q]) ? h : Math.max(peak[q], h); if (h >= 41) days[q]++; } }
   return { map: peak, days };
 }
-function flood(R, steps) { // max 3-day accumulated rain (mm)
-  const m = new Float32Array(N);
+function flood(R, steps) { // max 3-day accumulated rain (mm) on land; sea = NaN (flooding is a land hazard)
+  const m = new Float32Array(N).map((_, q) => land()[q] < 0.5 ? NaN : 0);
   for (let k = 0; k < steps; k++) for (let q = 0; q < N; q++) {
-    let s = 0; for (let o = Math.max(0, k - 2); o <= k; o++) s += at(R, o, 1)[q]; m[q] = Math.max(m[q], s); }
+    if (isNaN(m[q])) continue; let s = 0; for (let o = Math.max(0, k - 2); o <= k; o++) s += at(R, o, 1)[q]; m[q] = Math.max(m[q], s); }
   return m;
 }
-function crop(R, steps) { // 0..1 stress on land: rain deficit vs monthly climatology (70%) + heat days (30%)
-  const clim = S.tpClim[S.cur.month - 1], hd = heat(R, steps).days, out = new Float32Array(N);
+function crop(R, steps) { // 0..1 stress on land: rain deficit vs the start month's climatology (70%) + hot days (30%)
+  const clim = S.tpClim[S.cur.month - 1], hd = new Float32Array(N), out = new Float32Array(N);
+  for (let k = 0; k < steps; k++) { const T = at(R, k, 0); for (let q = 0; q < N; q++) if (T[q] - 273.15 >= 32) hd[q]++; }  // daily mean >= 32 C ~ afternoon >= 38 C: crop heat stress
   for (let q = 0; q < N; q++) { if (land()[q] < 0.5) { out[q] = NaN; continue; }
     let r = 0; for (let k = 0; k < steps; k++) r += at(R, k, 1)[q];
     const c = clim[q] * steps, def = c > steps ? Math.max(0, 1 - r / c) : 0;
@@ -117,7 +118,7 @@ function energy(R, steps) { // wind power density at 100 m (W/m²) and a solar c
   for (let k = 0; k < steps; k++) { const u = at(R, k, 2), v = at(R, k, 3), tp = at(R, k, 1), tw = at(R, k, 5);
     const dec = 23.44 * Math.sin(2 * Math.PI * (284 + doy0 + k + 1) / 365) * Math.PI / 180;
     for (let q = 0; q < N; q++) { const sp = Math.hypot(u[q], v[q]) * Math.pow(10, 1 / 7);
-      wind[q] += 0.5 * 1.225 * sp ** 3 / steps;
+      wind[q] += 1.91 * 0.5 * 1.225 * sp ** 3 / steps;   // x1.91 = Weibull (k=2) energy-pattern factor: daily-mean wind hides gusts
       const phi = latOf(Math.floor(q / W)) * Math.PI / 180, ws = Math.acos(Math.max(-1, Math.min(1, -Math.tan(phi) * Math.tan(dec))));
       const toa = 1361 / Math.PI * (ws * Math.sin(phi) * Math.sin(dec) + Math.cos(phi) * Math.cos(dec) * Math.sin(ws));
       const clear = Math.max(0.15, Math.min(0.8, 0.8 - 0.004 * tw[q] - 0.35 * (1 - Math.exp(-tp[q] / 5))));
@@ -193,7 +194,8 @@ function drawMap(title, data, cm, lo, hi, unit, box, wind) {
     setPreset("custom"); drag = null; render(); };
   cv.onmousemove = e => { const [la, lo2] = toLL(e), i = Math.floor(la - 6), jj = Math.floor(lo2 - 65);
     if (i >= 0 && i < H && jj >= 0 && jj < W) cv.title = `${la.toFixed(1)}°N ${lo2.toFixed(1)}°E: ${(+data[i * W + jj]).toFixed(2)} ${unit}`; };
-  const f = v => (Math.abs(hi - lo) >= 20 ? v.toFixed(0) : v.toFixed(1)).replace(/^-(0(\.0)?)$/, "$1");
+  const span = Math.abs(hi - lo), dec = span >= 20 ? 0 : span >= 2 ? 1 : span >= 0.2 ? 2 : 3;   // enough decimals for 5 distinct ticks
+  const f = v => v.toFixed(dec).replace(/^-(0\.?0*)$/, "$1");
   wrap.innerHTML = `<div class="cap">${title}</div>`; wrap.appendChild(cv);
   const ticks = [0, 0.25, 0.5, 0.75, 1].map(t => `<span style="left:${t * 100}%">${f(lo + t * (hi - lo))}</span>`).join("");
   wrap.insertAdjacentHTML("beforeend", `<div class="cbar" style="background:${grad(cm)}"></div><div class="ticks">${ticks}</div><div class="unit">${unit}</div>`);
@@ -234,22 +236,22 @@ function render() {
     kpis([[band(a, 41, 99), "land cells in DANGER (≥ 41 °C feels-like)"], [band(a, 32, 41), "land cells in EXTREME CAUTION (32–41 °C)"],
       ...(b ? [[(band(b, 41, 99) - band(a, 41, 99) >= 0 ? "+" : "") + (band(b, 41, 99) - band(a, 41, 99)), "change in danger cells from the shock"]] : []),
       [Math.max(...a.filter(v => isFinite(v))).toFixed(1) + " °C", "hottest feels-like anywhere"]]);
-    $("explain").textContent = `Feels-like temperature = US National Weather Service heat index, from the model's daily-mean temperature and humidity (dew point estimated from column water vapour, Reitan 1963). Grey = sea. Bands: 32–41 °C extreme caution, ≥ 41 °C danger. Daily means are cooler than afternoon peaks, so real afternoon values run higher. ${land_n} land cells.`;
+    $("explain").textContent = `Feels-like temperature = US National Weather Service heat index, from the model's daily-mean temperature and humidity (dew point estimated from column water vapour with a Reitan-type empirical relation, tropical coefficients). Grey = sea. Bands: 32–41 °C extreme caution, ≥ 41 °C danger. Daily means are cooler than afternoon peaks, so real afternoon values run higher. ${land_n} land cells.`;
   } else if (tab === "Flood") {
     const [a, b] = triple(R => flood(R, kk), "rain", "mm", `Max 3-day rainfall, days 1–${kk}`);
-    kpis([[count(a, v => v > 100), "cells > 100 mm in 3 days (high risk)"], [count(a, v => v > 50), "cells > 50 mm (moderate)"], ...(b ? [[count(b, v => v > 100) - count(a, v => v > 100), "change in high-risk cells from shock"]] : [])]);
-    $("explain").textContent = "Flood risk proxy: largest 3-day accumulated rain per 1° cell. Grid-cell means are much smoother than station rain, so thresholds are lower than IMD station categories.";
+    kpis([[count(a, v => v > 100), "land cells > 100 mm in 3 days (high risk)"], [count(a, v => v > 50 && v <= 100), "land cells 50–100 mm (moderate)"], ...(b ? [[count(b, v => v > 100) - count(a, v => v > 100), "change in high-risk land cells from shock"]] : [])]);
+    $("explain").textContent = "Flood risk proxy: largest 3-day accumulated rain on land per 1° (~110 km) cell; sea is grey. Grid-cell averages are much smoother than rain gauges, so these thresholds sit below IMD station categories (64.5 mm/day = heavy).";
   } else if (tab === "Crop") {
-    const [a, b] = triple(R => crop(R, kk), "risk", "stress 0–1", `Kharif crop water-stress index, days 1–${kk}`);
+    const [a, b] = triple(R => crop(R, kk), "risk", "stress 0–1", `Crop water stress, days 1–${kk}`);
     kpis([[(mean(a) * 100).toFixed(0) + "%", "mean land stress (Prime)"], [(count(a, v => v > 0.5) / count(L, v => v > 0.5) * 100).toFixed(0) + "%", "land area under high stress"],
       ...(b ? [[((mean(b) - mean(a)) * 100).toFixed(1) + " pts", "stress change from shock"]] : [])]);
-    $("explain").textContent = "Stress = 0.7 × rain deficit versus the month's 2005–2021 climatology + 0.3 × fraction of heat-stress days. Try the monsoon-stall shock.";
+    $("explain").textContent = "Stress = 0.7 × rain deficit versus the 2005–2021 normal for the starting month + 0.3 × share of hot days (daily-mean temperature ≥ 32 °C, roughly afternoon ≥ 38 °C). Dry-season months with little normal rain show no deficit (crops then rely on irrigation). Try the weaker-monsoon shock in June–September.";
   } else if (tab === "Energy") {
     const [wa, wb] = triple(R => energy(R, kk).wind, "seq", "W/m²", `Wind power density at 100 m, mean of days 1–${kk}`);
     const [sa, sb] = triple(R => energy(R, kk).sun, "heat", "W/m²", `Solar resource (clearness-weighted), days 1–${kk}`);
     kpis([[mean(wa).toFixed(0) + " W/m²", "mean wind power density"], [mean(sa, L).toFixed(0) + " W/m²", "mean solar on land"],
       ...(wb ? [[((mean(wb) / mean(wa) - 1) * 100).toFixed(1) + "%", "wind change from shock"], [((mean(sb, L) / mean(sa, L) - 1) * 100).toFixed(1) + "%", "solar change from shock"]] : [])]);
-    $("explain").textContent = "Wind: ½ρv³ with 10 m wind lifted to 100 m by a 1/7 power law. Solar: top-of-atmosphere daily insolation × a clearness factor that drops with moisture and rain.";
+    $("explain").textContent = "Indicative only. Wind: ½ρv³ at 100 m (10 m wind lifted by a 1/7 power law) × 1.91, the standard Weibull factor that restores the gusts a daily-mean wind hides. Solar: exact top-of-atmosphere daily sunlight × a simple clearness factor that drops with moisture and rain.";
   } else if (tab === "Inverse") {
     if (!inv) { $("explain").textContent = ""; return; }
     const dT = flat(inv.delta[0]), dq = flat(inv.delta[5]), sens = flat(inv.sensitivity), b = inv.box;
