@@ -79,7 +79,7 @@ with PdfPages(ROOT / a.out) as pdf:
     # ================================= PAGE 1 =================================
     f = plt.figure(figsize=(8.27, 11.69))
     text(f, 0.05, 0.975, "Monsoon Multiverse", 17, INK, "bold")
-    text(f, 0.95, 0.975, "Team: YC Backed", 11, ACC, "bold", ha="right")
+    text(f, 0.95, 0.975, "Team: YC backed", 11, ACC, "bold", ha="right")
     text(f, 0.05, 0.952, "A physics-aware, causal digital twin of India's daily weather  ·  Track 2  ·  page 1: model design, drift & blur, limits", 8.2, MUTE)
     y = head(f, 0.05, 0.925, "What we built")
     y = para(f, 0.05, y, [
@@ -149,7 +149,7 @@ with PdfPages(ROOT / a.out) as pdf:
     # ================================= PAGE 2 =================================
     f = plt.figure(figsize=(8.27, 11.69))
     text(f, 0.05, 0.975, "Monsoon Multiverse", 17, INK, "bold")
-    text(f, 0.95, 0.975, "Team: YC Backed", 11, ACC, "bold", ha="right")
+    text(f, 0.95, 0.975, "Team: YC backed", 11, ACC, "bold", ha="right")
     text(f, 0.05, 0.952, "page 2: visualization, multiverse shocks and impact  ·  dashboard drives the live server - nothing is pre-rendered", 8.2, MUTE)
     for k, (shot, cap, yb) in enumerate([("dashboard.png", "Timeline Prime vs warm-Bay universe vs difference (rain, day 4). The shock stays local, then spreads.", 0.665),
                                           ("dashboard_inverse.png", "Inverse shock discovery: smallest smooth change today that brings Mumbai-box rain to 40 mm on day 3, plus the sensitivity map.", 0.39)]):
