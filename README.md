@@ -15,7 +15,7 @@ train.py            MonsoonNet training (CUDA / Apple MPS / CPU, time-budgeted, 
 fit_postproc.py     per-lead rain scale fitted on 2019 only
 fit_blend.py        per-lead, per-variable blend of ensemble, baseline and climatology, fitted on 2019 only
 evaluate.py         self-evaluation with the organisers' scoring functions (--v2 for the ensemble)
-weights_v2/         submitted ensemble (3 seeds) + climatology/static maps (~30 MB, no LFS needed)
+weights_v2/         submitted ensemble (3 seeds) + climatology/static maps (~40 MB, no LFS needed)
 model.py, weights/, train_baseline.py   first baseline model (used automatically if weights_v2/ is absent)
 dashboard/          interactive map dashboard (static HTML/JS, separate from the server)
 brief/              2-page brief (PDF) and the script that builds it
@@ -82,7 +82,14 @@ are in `brief/brief.pdf`.
 Training data: `india_climate_train.nc` from the organisers' team kit (v1.0.0, checksums verified against its
 `SHA256SUMS.txt`). Contains modified Copernicus Climate Change Service information (ERA5, Hersbach et al. 2020),
 accessed through Google WeatherBench 2 (Rasp et al. 2024); ERA5 is licensed under CC BY 4.0. The model weights,
-`dashboard/samples.json` (six 3-day starting windows) and the numbers in `eval/` are derived from it.
+`dashboard/samples.json` (eleven 3-day starting windows) and the numbers in `eval/` are derived from it.
+
+**What is and isn't shipped.** No archive of past weather is used for forecasting. `dashboard/samples.json` holds 33 days
+(11 example starting states plus a monthly rain climatology and flood thresholds) that only the dashboard reads, to send
+as `init_states`; the server never opens it. Each `weights_v*/…/climatology_norm.npy` is a day-of-year average per cell
+(365 × 6 × 32 × 36, training years 2005-18), the standard climatology baseline used as a model input and in the blend
+`clim + a(ensemble - clim) + b(baseline - clim)`. It is indexed by day of year, never by calendar date, so it cannot
+look up any particular year's weather.
 Evaluation uses the kit's `monsoon_r1` scoring code (MIT), installed separately and never imported by the server.
 
 ## Dashboard-only server extras (never used by the grader's `/simulate` calls)
