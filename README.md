@@ -34,7 +34,7 @@ python dashboard/serve_dashboard.py    # terminal 2: http://localhost:8080
 Pick a starting state (real 3-day windows), choose a preset shock (warm Bay of Bengal, monsoon stall) or draw your own
 box on any map, press **Run**. Every map is computed in the browser from the live `/simulate` output:
 Weather (prime / shocked / difference by day), Heat stress, Flood risk, Kharif crop water stress, Wind & solar energy,
-and an 8-member Ensemble (spread and heavy-rain probability). No internet or CDN is needed.
+and Uncertainty (the trained 24-member ensemble with spread calibrated on 2019: ± std and heavy-rain probability). Shocks can be a one-day kick (as in the official test) or held every day (like a sea that stays warm). No internet or CDN is needed.
 
 ## Train
 ```bash

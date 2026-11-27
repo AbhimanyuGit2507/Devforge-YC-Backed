@@ -287,15 +287,6 @@ function render() {
   }
 }
 
-function smoothNoise(amp) {
-  let a = Float32Array.from({ length: N }, () => (Math.random() * 2 - 1));
-  for (let it = 0; it < 3; it++) { const b = new Float32Array(N);
-    for (let i = 0; i < H; i++) for (let j = 0; j < W; j++) { let s = 0, n = 0;
-      for (let di = -1; di <= 1; di++) for (let dj = -1; dj <= 1; dj++) { const y = i + di, x = j + dj; if (y >= 0 && y < H && x >= 0 && x < W) { s += a[y * W + x]; n++; } }
-      b[i * W + j] = s / n; } a = b; }
-  const m = Math.max(...a.map(Math.abs)); return a.map(v => v / m * amp);
-}
-
 let runId = 0;
 async function run() {
   const id = ++runId;                                       // a newer Run makes older in-flight results stale
