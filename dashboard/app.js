@@ -14,7 +14,7 @@ const TABLABEL = { Weather: "🌦 Weather", Heat: "🔥 Heat stress", Flood: "�
 const TABDESC = {
   Weather: "Day-by-day forecast. Left: real-world forecast (Timeline Prime). Middle: the what-if universe. Right: the difference — red = more, blue = less. Arrows show the 10 m wind.",
   Heat: "How hot it feels (heat index, temperature + humidity) — the highest value so far in each land cell. Red = dangerous heat. Use ▶ Play to watch it build.",
-  Flood: "Flood risk: the largest 3-day rain total so far in each 110 km cell. More than 100 mm in 3 days = high risk.",
+  Flood: "Flood risk: 3-day rain compared with what is extreme for that place (its own 1-in-100-day total). 1.0 or more = rare, high risk.",
   Crop: "Crop water stress (0 = fine, 1 = severe): rain shortfall vs the normal for this month, plus very hot days. Most useful in the June–September (Kharif) season.",
   Energy: "Indicative wind power (top row) and solar resource (bottom row), averaged over the days so far — what the shock means for renewables.",
   Ensemble: "8 slightly nudged copies of the same forecast. Where they disagree (spread), the forecast is uncertain. Right: chance of heavy rain.",
@@ -93,7 +93,8 @@ function heat(R, steps) { // feels-like temperature from daily-mean T and humidi
   const es = c => 6.112 * Math.exp(17.62 * c / (243.12 + c));
   for (let k = 0; k < steps; k++) { const T = at(R, k, 0), Q = at(R, k, 5);
     for (let q = 0; q < N; q++) { if (land()[q] < 0.5) continue;
-      const tc = T[q] - 273.15, td = Math.min(tc, (Math.log(Math.max(Q[q], 1) / 10) - 0.1102) / 0.0614);   // dew point from column water vapour: Reitan-type ln(W) = a + b*Td fit with humid-tropics coefficients
+      // surface vapour density = column water vapour / 2.5 km vapour scale height (fits Kolkata-July / Delhi-May humidity); e = rho_v*Rv*T; Magnus
+      const tc = T[q] - 273.15, e = Math.max(Q[q], 0.5) / 2500 * 461.5 * T[q] / 100, lr = Math.log(e / 6.112), td = Math.min(tc, 243.12 * lr / (17.62 - lr));
       const h = heatIndexC(tc, Math.min(100, 100 * es(td) / es(tc)));
       peak[q] = isNaN(peak[q]) ? h : Math.max(peak[q], h); if (h >= 41) days[q]++; } }
   return { map: peak, days };
@@ -105,11 +106,13 @@ function flood(R, steps) { // max 3-day accumulated rain (mm) on land; sea = NaN
   return m;
 }
 function crop(R, steps) { // 0..1 stress on land: rain deficit vs the start month's climatology (70%) + hot days (30%)
-  const clim = S.tpClim[S.cur.month - 1], hd = new Float32Array(N), out = new Float32Array(N);
+  const doy0 = Math.round(Math.atan2(...S.cur.doy_sincos) / 2 / Math.PI * 365 + 365) % 365, hd = new Float32Array(N), out = new Float32Array(N);
+  const normal = (q, day) => { const m = ((day % 365) / 365 * 12 - 0.5 + 12) % 12, m0 = Math.floor(m), f = m - m0;   // monthly normals, centred mid-month
+    return (1 - f) * S.tpClim[m0][q] + f * S.tpClim[(m0 + 1) % 12][q]; };
   for (let k = 0; k < steps; k++) { const T = at(R, k, 0); for (let q = 0; q < N; q++) if (T[q] - 273.15 >= 32) hd[q]++; }  // daily mean >= 32 C ~ afternoon >= 38 C: crop heat stress
   for (let q = 0; q < N; q++) { if (land()[q] < 0.5) { out[q] = NaN; continue; }
-    let r = 0; for (let k = 0; k < steps; k++) r += at(R, k, 1)[q];
-    const c = clim[q] * steps, def = c > steps ? Math.max(0, 1 - r / c) : 0;
+    let r = 0, c = 0; for (let k = 0; k < steps; k++) { r += at(R, k, 1)[q]; c += normal(q, doy0 + k + 1); }
+    const def = c > steps ? Math.max(0, 1 - r / c) : 0;   // no deficit where the normal is < 1 mm/day (dry season)
     out[q] = 0.7 * def + 0.3 * Math.min(1, hd[q] / steps * 2); }
   return out;
 }
@@ -236,16 +239,20 @@ function render() {
     kpis([[band(a, 41, 99), "land cells in DANGER (≥ 41 °C feels-like)"], [band(a, 32, 41), "land cells in EXTREME CAUTION (32–41 °C)"],
       ...(b ? [[(band(b, 41, 99) - band(a, 41, 99) >= 0 ? "+" : "") + (band(b, 41, 99) - band(a, 41, 99)), "change in danger cells from the shock"]] : []),
       [Math.max(...a.filter(v => isFinite(v))).toFixed(1) + " °C", "hottest feels-like anywhere"]]);
-    $("explain").textContent = `Feels-like temperature = US National Weather Service heat index, from the model's daily-mean temperature and humidity (dew point estimated from column water vapour with a Reitan-type empirical relation, tropical coefficients). Grey = sea. Bands: 32–41 °C extreme caution, ≥ 41 °C danger. Daily means are cooler than afternoon peaks, so real afternoon values run higher. ${land_n} land cells.`;
+    $("explain").textContent = `Feels-like temperature = US National Weather Service heat index, from the model's daily-mean temperature and humidity (surface humidity = column water vapour ÷ a ~2.5 km water-vapour scale height, then dew point via the Magnus formula). Grey = sea. Bands: 32–41 °C extreme caution, ≥ 41 °C danger. Daily means are cooler than afternoon peaks, so real afternoon values run higher. ${land_n} land cells.`;
   } else if (tab === "Flood") {
-    const [a, b] = triple(R => flood(R, kk), "rain", "mm", `Max 3-day rainfall, days 1–${kk}`);
-    kpis([[count(a, v => v > 100), "land cells > 100 mm in 3 days (high risk)"], [count(a, v => v > 50 && v <= 100), "land cells 50–100 mm (moderate)"], ...(b ? [[count(b, v => v > 100) - count(a, v => v > 100), "change in high-risk land cells from shock"]] : [])]);
-    $("explain").textContent = "Flood risk proxy: largest 3-day accumulated rain on land per 1° (~110 km) cell; sea is grey. Grid-cell averages are much smoother than rain gauges, so these thresholds sit below IMD station categories (64.5 mm/day = heavy).";
+    const idx = m => m.map((v, q) => v / S.p99[q]);   // 1.0 = this cell's own 1-in-100-day 3-day rain (2005–2021)
+    const [a, b] = triple(R => idx(flood(R, kk)), "risk", "× local 1-in-100-day total", `Flood risk index (3-day rain ÷ local extreme), days 1–${kk}`);
+    const hi = x => count(x, v => v >= 1), ele = x => x.reduce((n, v, q) => n + (v < 1 && v >= S.p95[q] / S.p99[q] ? 1 : 0), 0);
+    kpis([[hi(a), "land cells at/above their 1-in-100-day 3-day rain (HIGH)"], [ele(a), "land cells above their 1-in-20-day total (ELEVATED)"],
+      ...(b ? [[(hi(b) - hi(a) >= 0 ? "+" : "") + (hi(b) - hi(a)), "change in HIGH cells from the shock"]] : []),
+      [Math.max(...flood(base.R, kk).filter(isFinite)).toFixed(0) + " mm", "largest 3-day total on land"]]);
+    $("explain").textContent = "Flood risk index = largest 3-day rain so far ÷ that cell's own 99th-percentile 3-day rain in 2005–2021 (its 1-in-100-day total). 1.0 or more = rare for that place (HIGH); above its 95th percentile (1-in-20-day) = ELEVATED. Local thresholds matter: 100 mm is routine for Mumbai but extreme for Jaipur. Sea is grey.";
   } else if (tab === "Crop") {
     const [a, b] = triple(R => crop(R, kk), "risk", "stress 0–1", `Crop water stress, days 1–${kk}`);
     kpis([[(mean(a) * 100).toFixed(0) + "%", "mean land stress (Prime)"], [(count(a, v => v > 0.5) / count(L, v => v > 0.5) * 100).toFixed(0) + "%", "land area under high stress"],
       ...(b ? [[((mean(b) - mean(a)) * 100).toFixed(1) + " pts", "stress change from shock"]] : [])]);
-    $("explain").textContent = "Stress = 0.7 × rain deficit versus the 2005–2021 normal for the starting month + 0.3 × share of hot days (daily-mean temperature ≥ 32 °C, roughly afternoon ≥ 38 °C). Dry-season months with little normal rain show no deficit (crops then rely on irrigation). Try the weaker-monsoon shock in June–September.";
+    $("explain").textContent = "Stress = 0.7 × rain deficit versus the 2005–2021 normal for each forecast day (interpolated between monthly normals) + 0.3 × share of hot days (daily-mean temperature ≥ 32 °C, roughly afternoon ≥ 38 °C). Dry-season months with little normal rain show no deficit (crops then rely on irrigation). Try the weaker-monsoon shock in June–September.";
   } else if (tab === "Energy") {
     const [wa, wb] = triple(R => energy(R, kk).wind, "seq", "W/m²", `Wind power density at 100 m, mean of days 1–${kk}`);
     const [sa, sb] = triple(R => energy(R, kk).sun, "heat", "W/m²", `Solar resource (clearness-weighted), days 1–${kk}`);
@@ -346,7 +353,7 @@ async function init() {
   // local runs talk to the local server; the hosted dashboard talks to the hosted server; ?server=URL overrides both
   const qs = new URLSearchParams(location.search).get("server"), local = ["localhost", "127.0.0.1", ""].includes(location.hostname);
   $("server").value = qs || (local ? "http://localhost:8000" : "https://yc-backed-monsoon.onrender.com");
-  S = await (await fetch("samples.json")).json(); S.landFlat = flat(S.land); S.tpClim = S.tp_clim_month.map(flat);
+  S = await (await fetch("samples.json")).json(); S.landFlat = flat(S.land); S.tpClim = S.tp_clim_month.map(flat); S.p95 = flat(S.flood_p95); S.p99 = flat(S.flood_p99);
   S.samples.forEach((s, i) => $("sample").insertAdjacentHTML("beforeend", `<option value="${i}">${s.name}</option>`));
   const sd = () => { $("sdesc").textContent = SAMPLEDESC[S.samples[+$("sample").value].name] || ""; };
   $("sample").onchange = () => { sd(); guide(1); }; sd();

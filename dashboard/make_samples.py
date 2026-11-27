@@ -26,6 +26,9 @@ out = {"lat": ds["lat"].values.tolist(), "lon": ds["lon"].values.tolist(), "chan
 r1 = lambda x: np.round(np.asarray(x, "f8"), 2).tolist()
 tp = data.sel(channel="tp")
 out["tp_clim_month"] = r1(tp.groupby("time.month").mean("time").values)  # [12,32,36] mm/day
+tp3 = tp.rolling(time=3).sum().values[2:]                                 # 3-day rain totals, all days 2005-2021
+out["flood_p95"] = r1(np.maximum(np.percentile(tp3, 95, axis=0), 15))     # per-cell "heavy for this place" (floor 15 mm)
+out["flood_p99"] = r1(np.maximum(np.percentile(tp3, 99, axis=0), 25))     # per-cell 1-in-100-day 3-day total (floor 25 mm)
 for name, day in WINDOWS.items():
     i = t.get_loc(day); d = t[i]
     doy = d.dayofyear
