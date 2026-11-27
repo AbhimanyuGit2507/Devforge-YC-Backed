@@ -124,7 +124,7 @@ function energy(R, steps) { // wind power density at 100 m (W/m²) and a solar c
     for (let q = 0; q < N; q++) { const sp = Math.hypot(u[q], v[q]) * Math.pow(10, land()[q] > 0.5 ? 0.2 : 0.11);   // 10 m -> 100 m: shear exponent 0.2 over land, 0.11 offshore
       speed[q] += sp / steps; wind[q] += 1.91 * 0.5 * 1.225 * sp ** 3 / steps;   // x1.91 = Weibull (k=2) energy-pattern factor: daily-mean wind hides gusts
       const phi = latOf(Math.floor(q / W)) * Math.PI / 180, ws = Math.acos(Math.max(-1, Math.min(1, -Math.tan(phi) * Math.tan(dec))));
-      const toa = 1361 / Math.PI * (ws * Math.sin(phi) * Math.sin(dec) + Math.cos(phi) * Math.cos(dec) * Math.sin(ws));
+      const toa = 1361 * (1 + 0.033 * Math.cos(2 * Math.PI * (doy0 + k + 1) / 365)) / Math.PI * (ws * Math.sin(phi) * Math.sin(dec) + Math.cos(phi) * Math.cos(dec) * Math.sin(ws));
       const clear = Math.max(0.15, Math.min(0.8, 0.8 - 0.004 * tw[q] - 0.35 * (1 - Math.exp(-tp[q] / 5))));
       sun[q] += toa * clear / steps; } }
   return { wind, speed, sun };
@@ -139,7 +139,7 @@ const CELL = 12;                                  // canvas pixels per 1-degree 
 const CITIES = [["Delhi", 28.6, 77.2, 1], ["Mumbai", 19.1, 72.9, 1], ["Kolkata", 22.6, 88.4, 1], ["Chennai", 13.1, 80.3, 1], ["Bengaluru", 13.0, 77.6, -1], ["Ahmedabad", 23.0, 72.6, -1], ["Guwahati", 26.1, 91.7, 1]];
 const px = lon => (lon - 65) * CELL, py = lat => (38 - lat) * CELL;
 function coastline(g) {  // marching squares on the land fraction at cell centres -> smooth 0.5 contour
-  const L = land(), v = (i, j) => L[i * W + j], cx = j => (j + 0.5) * CELL, cy = i => (H - i - 0.5) * CELL;
+  const L = S.landFrac, v = (i, j) => L[i * W + j], cx = j => (j + 0.5) * CELL, cy = i => (H - i - 0.5) * CELL;
   const lerp = (a, b) => (0.5 - a) / (b - a);
   g.beginPath();
   for (let i = 0; i < H - 1; i++) for (let j = 0; j < W - 1; j++) {
@@ -173,14 +173,15 @@ function drawMap(title, data, cm, lo, hi, unit, box, wind) {
     for (let pass = 0; pass < 2; pass++) {
       g.strokeStyle = pass ? "rgba(255,255,255,.92)" : "rgba(0,0,0,.55)"; g.fillStyle = g.strokeStyle; g.lineWidth = pass ? 1.3 : 3;
       for (let i = 1; i < H; i += 3) for (let jx = 1; jx < W; jx += 3) {
-        const q = i * W + jx, u = wind.u[q], v = wind.v[q], sp = Math.hypot(u, v); if (sp < ref * 0.06) continue;
-        const L = Math.min(1, sp / ref) * 2.6 * CELL, x0 = (jx + 0.5) * CELL, y0 = (H - i - 0.5) * CELL, dx = u / sp * L, dy = -v / sp * L;
+        const q = i * W + jx, u = wind.u[q], v = wind.v[q], sp = Math.hypot(u, v); if (sp < Math.max(0.2, ref * 0.02)) continue;
+        // sqrt scaling: weak land winds (~1-2 m/s daily mean) stay visible next to 10 m/s sea winds
+        const L = Math.sqrt(Math.min(1, sp / ref)) * 2.6 * CELL, x0 = (jx + 0.5) * CELL, y0 = (H - i - 0.5) * CELL, dx = u / sp * L, dy = -v / sp * L;
         g.beginPath(); g.moveTo(x0 - dx / 2, y0 - dy / 2); g.lineTo(x0 + dx / 2, y0 + dy / 2); g.stroke();
         const a = Math.atan2(dy, dx), hx = x0 + dx / 2, hy = y0 + dy / 2, hs = 4 + L * 0.12;
         g.beginPath(); g.moveTo(hx, hy); g.lineTo(hx - hs * Math.cos(a - 0.45), hy - hs * Math.sin(a - 0.45)); g.lineTo(hx - hs * Math.cos(a + 0.45), hy - hs * Math.sin(a + 0.45)); g.closePath(); g.fill();
       }
     }
-    g.fillStyle = "rgba(255,255,255,.75)"; g.font = "10px system-ui, sans-serif"; g.fillText(`longest arrow = ${ref.toFixed(1)} m/s`, W * CELL - 150, 12);
+    g.fillStyle = "rgba(255,255,255,.75)"; g.font = "10px system-ui, sans-serif"; g.fillText(`longest arrow = ${ref.toFixed(1)} m/s · length ∝ √speed`, W * CELL - 205, 12);
   }
   g.font = "600 10px system-ui, sans-serif"; g.textBaseline = "middle";
   CITIES.forEach(([n, la, lo2, side]) => { const x = px(lo2), y = py(la), tx = side > 0 ? x + 5 : x - 5 - g.measureText(n).width;
@@ -353,7 +354,7 @@ async function init() {
   // local runs talk to the local server; the hosted dashboard talks to the hosted server; ?server=URL overrides both
   const qs = new URLSearchParams(location.search).get("server"), local = ["localhost", "127.0.0.1", ""].includes(location.hostname);
   $("server").value = qs || (local ? "http://localhost:8000" : "https://yc-backed-monsoon.onrender.com");
-  S = await (await fetch("samples.json")).json(); S.landFlat = flat(S.land); S.tpClim = S.tp_clim_month.map(flat); S.p95 = flat(S.flood_p95); S.p99 = flat(S.flood_p99);
+  S = await (await fetch("samples.json")).json(); S.landFrac = flat(S.land); S.landFlat = S.landFrac.map(v => v >= 0.5 ? 1 : 0); S.tpClim = S.tp_clim_month.map(flat); S.p95 = flat(S.flood_p95); S.p99 = flat(S.flood_p99);   // one land/sea rule for every map
   S.samples.forEach((s, i) => $("sample").insertAdjacentHTML("beforeend", `<option value="${i}">${s.name}</option>`));
   const sd = () => { $("sdesc").textContent = SAMPLEDESC[S.samples[+$("sample").value].name] || ""; };
   $("sample").onchange = () => { sd(); guide(1); }; sd();

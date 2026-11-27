@@ -2,13 +2,15 @@
 <html lang="en">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Monsoon Multiverse</title>
+<title>Monsoon Multiverse · YC Backed</title>
 <style>
 :root{--bg:#0d1216;--panel:#151d24;--panel2:#1b252e;--ink:#e8eef2;--mute:#8fa1ae;--accent:#4fb3d9;--accent2:#f2a65a;--ok:#5cc28a;--line:#26323c}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,-apple-system,Segoe UI,sans-serif}
 header{padding:12px 20px;border-bottom:1px solid var(--line);display:flex;gap:18px;align-items:center;flex-wrap:wrap}
 header h1{font-size:18px;margin:0;letter-spacing:.2px}
+.logo{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:8px;background:#f26522;color:#fff;font-weight:800;font-size:13px;letter-spacing:.5px}
+.logo b{font-weight:600;background:#fff;color:#f26522;border-radius:4px;padding:0 5px}
 header .sub{color:var(--mute);font-size:13px}
 .pill{margin-left:auto;font-size:12px;padding:4px 10px;border-radius:999px;background:var(--panel2);border:1px solid var(--line);color:var(--mute)}
 .pill.ok{color:var(--ok);border-color:#2f5a44}.pill.err{color:#f08a7a;border-color:#6a3530}
@@ -61,7 +63,7 @@ details{margin-top:4px}summary{cursor:pointer;color:var(--ink);font-size:13px;fo
 </head>
 <body>
 <header>
-  <h1>Monsoon Multiverse</h1><span class="sub">AI digital twin of India's weather · what happens if…?</span>
+  <span class="logo">YC<b>Backed</b></span><h1>Monsoon Multiverse</h1><span class="sub">AI digital twin of India's weather · what happens if…?</span>
   <span class="pill" id="status">connecting…</span>
 </header>
 <div class="steps" id="guide"><span id="g1" class="on">① Choose a starting day</span><span id="g2">② Choose a what-if shock (optional)</span><span id="g3">③ Run</span><span id="g4">④ Explore the tabs · ▶ Play</span></div>

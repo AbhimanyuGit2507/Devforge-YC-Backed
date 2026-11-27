@@ -79,3 +79,10 @@ Evaluation uses the kit's `monsoon_r1` scoring code (MIT), installed separately 
 - `POST /simulate` with `"sustained": true` — keeps the shock on every day (like a persistently warm sea) and returns a
   matched `baseline`; a zero shock still returns identical runs.
 - `POST /inverse` — inverse shock discovery (smallest smooth trigger for a target rain amount).
+
+## Tests
+```bash
+python tests/scenarios.py     # 20 scenario checks: physical ranges, shock signs/locality, zero shock, uncertainty, inverse
+python tests/check_maps.py    # 43 checks: every dashboard map formula (run from dashboard/app.js in Node) vs an independent
+                              # NumPy implementation, plus NWS heat-index table and top-of-atmosphere sunlight reference values
+```

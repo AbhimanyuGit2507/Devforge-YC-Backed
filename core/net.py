@@ -189,7 +189,7 @@ class Ensemble:
             k = torch.arange(steps).clamp_max(len(self.pp["tp_scale"]) - 1)
             out[:, TP] *= torch.tensor(self.pp["tp_scale"])[k][:, None, None]
         out = torch.nan_to_num(out, nan=0.0, posinf=0.0, neginf=0.0)   # before the clamps, so a NaN can never become 0 K
-        out[:, 0] = out[:, 0].clamp(240.0, 330.0); out[:, TP] = out[:, TP].clamp_min(0)
+        out[:, 0] = out[:, 0].clamp(240.0, 330.0); out[:, TP] = out[:, TP].clamp_min(0); out[:, 5] = out[:, 5].clamp_min(0)   # rain and water vapour can't be negative
         return out.numpy().astype("f4")
 
 
